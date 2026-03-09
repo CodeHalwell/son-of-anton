@@ -32,7 +32,7 @@
     "https-proxy-agent": "^7.0.2",
     "jschardet": "3.1.4",
     "katex": "^0.16.22",
-    "kerberos": "2.1.1",
+    "kerberos": "^2.1.1",
     "minimist": "^1.2.8",
     "node-pty": "^1.2.0-beta.10",
     "tas-client": "0.3.1",
@@ -44,7 +44,7 @@
   },
   "overrides": {
     "node-gyp-build": "4.8.1",
-    "kerberos@2.1.1": {
+    "kerberos": {
       "node-addon-api": "7.1.0"
     }
   }
