@@ -1,0 +1,172 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* ---- Terminal Blocks ---- */
+
+.tb-block {
+	background: #0D0D0D;
+	margin: 4px 0;
+	padding: 8px 12px;
+	border-radius: 4px;
+	border-left: 3px solid #3A3A3A;
+	position: relative;
+}
+
+/* ---- Block kind border colours ---- */
+
+.tb-block.tb-kind-manual {
+	border-left-color: #3A3A3A;
+}
+
+.tb-block.tb-kind-agent {
+	border-left-color: #F5A623;
+}
+
+.tb-block.tb-kind-build-pass {
+	border-left-color: #2A5A2A;
+}
+
+.tb-block.tb-kind-build-fail {
+	border-left-color: #5A2A2A;
+}
+
+.tb-block.tb-kind-checkpoint {
+	border-left-color: #B8860B;
+}
+
+.tb-block.tb-kind-system {
+	border-left-color: #2A2A2A;
+}
+
+/* ---- Running block pulse ---- */
+
+@keyframes tb-pulse {
+	0%   { border-left-color: #F5A623; }
+	50%  { border-left-color: #7A5311; }
+	100% { border-left-color: #F5A623; }
+}
+
+.tb-block.tb-running {
+	animation: tb-pulse 2s ease-in-out infinite;
+}
+
+/* ---- Header ---- */
+
+.tb-block-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+	font-family: var(--soa-font-ui);
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.tb-block-header .tb-agent-name {
+	color: #F5A623;
+	font-weight: 600;
+}
+
+.tb-block-header .tb-model {
+	color: #888888;
+}
+
+.tb-block-header .tb-timestamp {
+	color: #666666;
+	margin-left: auto;
+}
+
+/* ---- Command ---- */
+
+.tb-block-command {
+	font-family: var(--soa-font-mono);
+	font-size: 13px;
+	line-height: 20px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	color: #D4D4D4;
+	padding: 2px 0;
+}
+
+/* ---- Output ---- */
+
+.tb-block-output {
+	font-family: var(--soa-font-mono);
+	font-size: 12px;
+	line-height: 18px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	color: #AAAAAA;
+	padding: 4px 0 0 0;
+	overflow: hidden;
+}
+
+.tb-block-output.tb-collapsed {
+	max-height: 0;
+	padding: 0;
+}
+
+.tb-block-output-toggle {
+	display: inline-block;
+	cursor: pointer;
+	color: #888888;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	margin-top: 2px;
+	user-select: none;
+}
+
+.tb-block-output-toggle:hover {
+	color: #D4D4D4;
+}
+
+/* ---- Metadata (hover reveal) ---- */
+
+.tb-block-metadata {
+	display: none;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	color: #666666;
+	margin-top: 4px;
+	gap: 12px;
+}
+
+.tb-block:hover .tb-block-metadata {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+/* ---- Actions (hover reveal) ---- */
+
+.tb-block-actions {
+	display: none;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.tb-block:hover .tb-block-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.tb-block-actions button {
+	background: none;
+	border: 1px solid #444444;
+	border-radius: 3px;
+	color: #AAAAAA;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	padding: 2px 8px;
+	cursor: pointer;
+}
+
+.tb-block-actions button:hover {
+	background: #1A1A1A;
+	color: #D4D4D4;
+	border-color: #666666;
+}

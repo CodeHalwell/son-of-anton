@@ -1,0 +1,750 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * Mission Control — Kanban board stylesheet.
+ *
+ * Uses Son of Anton colour tokens defined in colorTokens.css.
+ * All UI text uses the proportional --soa-font-ui stack (Geist),
+ * NOT monospace, to visually distinguish Mission Control from
+ * editor surfaces.
+ */
+
+/* =========================================================================
+ * 1. Board layout
+ * ========================================================================= */
+
+.mc-board {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	height: 100%;
+	overflow-x: auto;
+	overflow-y: hidden;
+	background: var(--soa-bg-secondary, #111111);
+	gap: 12px;
+	padding: 16px;
+	font-family: var(--soa-font-ui);
+}
+
+/* =========================================================================
+ * 2. Filter bar
+ * ========================================================================= */
+
+.mc-filter-bar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 16px;
+	background: var(--soa-bg-canvas, #0A0A0A);
+	border-bottom: 1px solid var(--soa-gold-secondary, #B8860B);
+	font-family: var(--soa-font-ui);
+}
+
+.mc-filter-bar .mc-filter-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 10px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 12px;
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-secondary, #888888);
+	font-size: 12px;
+	font-family: var(--soa-font-ui);
+	cursor: pointer;
+	transition: border-color 0.15s, color 0.15s;
+}
+
+.mc-filter-bar .mc-filter-chip:hover,
+.mc-filter-bar .mc-filter-chip--active {
+	border-color: var(--soa-gold-primary, #F5A623);
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+.mc-filter-bar .mc-search-input {
+	flex: 1;
+	min-width: 160px;
+	padding: 4px 10px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 4px;
+	background: var(--soa-bg-input, #141414);
+	color: var(--soa-text-primary, #E8E8E8);
+	font-size: 13px;
+	font-family: var(--soa-font-ui);
+	outline: none;
+	transition: border-color 0.15s;
+}
+
+.mc-filter-bar .mc-search-input:focus {
+	border-color: var(--soa-border-focus, #F5A623);
+}
+
+/* =========================================================================
+ * 3. Columns
+ * ========================================================================= */
+
+.mc-column {
+	display: flex;
+	flex-direction: column;
+	min-width: 280px;
+	flex: 1;
+	max-height: 100%;
+	overflow-y: auto;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-radius: 8px;
+	font-family: var(--soa-font-ui);
+}
+
+/* =========================================================================
+ * 4. Column headers
+ * ========================================================================= */
+
+.mc-column-header {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 12px;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-left: 3px solid transparent;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	font-size: 13px;
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+.mc-column-header .mc-ticket-count {
+	margin-left: auto;
+	padding: 2px 8px;
+	border-radius: 10px;
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-secondary, #888888);
+	font-size: 11px;
+	font-family: var(--soa-font-ui);
+}
+
+/* Status-specific header colours */
+
+.mc-column--queued .mc-column-header {
+	border-left-color: var(--soa-mc-status-queued, #808080);
+}
+
+.mc-column--running .mc-column-header {
+	border-left-color: var(--soa-mc-status-running, #F5A623);
+}
+
+.mc-column--review .mc-column-header {
+	border-left-color: var(--soa-mc-status-review, #E67E22);
+}
+
+.mc-column--complete .mc-column-header {
+	border-left-color: var(--soa-mc-status-complete, #27AE60);
+}
+
+.mc-column--failed .mc-column-header {
+	border-left-color: var(--soa-mc-status-failed, #E74C3C);
+}
+
+/* =========================================================================
+ * 5. Task cards
+ * ========================================================================= */
+
+.mc-task-card {
+	background: var(--soa-bg-elevated, #161616);
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 6px;
+	padding: 12px;
+	margin: 8px;
+	cursor: pointer;
+	transition: border-color 0.2s, box-shadow 0.2s;
+	font-family: var(--soa-font-ui);
+}
+
+.mc-task-card:hover {
+	border-color: var(--soa-gold-primary, #F5A623);
+	box-shadow: 0 0 8px var(--soa-gold-glow, rgba(245, 166, 35, 0.15));
+}
+
+/* =========================================================================
+ * 6. Card internals
+ * ========================================================================= */
+
+/* Header row — type badge, title, priority */
+
+.mc-card-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.mc-card-title {
+	flex: 1;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	font-size: 13px;
+	color: var(--soa-text-primary, #E8E8E8);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mc-type-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	color: var(--soa-text-primary, #E8E8E8);
+	background: var(--soa-bg-hover, #1A1A1A);
+}
+
+.mc-priority-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+/* Agent row — agent name + model badge */
+
+.mc-agent-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+	font-size: 12px;
+	font-family: var(--soa-font-ui);
+	color: var(--soa-text-secondary, #888888);
+}
+
+.mc-model-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 6px;
+	border-radius: 8px;
+	font-size: 10px;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	color: #FFFFFF;
+}
+
+.mc-model-badge--opus {
+	background: var(--soa-model-opus, #7B2D8B);
+}
+
+.mc-model-badge--sonnet {
+	background: var(--soa-model-sonnet, #2D5B8B);
+}
+
+.mc-model-badge--haiku {
+	background: var(--soa-model-haiku, #2D8B5B);
+}
+
+/* Metrics row — cost, tokens, elapsed */
+
+.mc-metrics-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 6px;
+	font-size: 11px;
+	font-family: var(--soa-font-ui);
+	color: var(--soa-text-muted, #555555);
+}
+
+/* Labels row */
+
+.mc-labels-row {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 6px;
+}
+
+.mc-label-tag {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border: 1px solid var(--soa-gold-secondary, #B8860B);
+	border-radius: 10px;
+	font-size: 10px;
+	font-family: var(--soa-font-ui);
+	color: var(--soa-gold-primary, #F5A623);
+	background: transparent;
+}
+
+/* Trace summary */
+
+.mc-trace-summary {
+	font-size: 11px;
+	font-family: var(--soa-font-ui);
+	color: var(--soa-text-muted, #555555);
+	margin-bottom: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Acceptance criteria */
+
+.mc-acceptance-criteria {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 8px;
+	font-size: 12px;
+	font-family: var(--soa-font-ui);
+	color: var(--soa-text-secondary, #888888);
+}
+
+.mc-acceptance-criteria label {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.mc-acceptance-criteria input[type="checkbox"] {
+	accent-color: var(--soa-gold-primary, #F5A623);
+}
+
+/* =========================================================================
+ * 7. Card state animations
+ * ========================================================================= */
+
+/* Running — amber pulse border */
+
+@keyframes mc-pulse-amber {
+	0%, 100% {
+		border-color: var(--soa-gold-primary, #F5A623);
+		box-shadow: 0 0 4px var(--soa-gold-glow, rgba(245, 166, 35, 0.15));
+	}
+	50% {
+		border-color: var(--soa-gold-secondary, #B8860B);
+		box-shadow: 0 0 12px var(--soa-gold-glow, rgba(245, 166, 35, 0.15));
+	}
+}
+
+.mc-task-card--running {
+	animation: mc-pulse-amber 2s ease-in-out infinite;
+}
+
+/* Blocked — dimmed with dashed border */
+
+.mc-task-card--blocked {
+	opacity: 0.6;
+	border-style: dashed;
+}
+
+/* Complete — green left accent */
+
+.mc-task-card--complete {
+	border-left: 3px solid var(--soa-mc-status-complete, #27AE60);
+}
+
+/* =========================================================================
+ * 8. New ticket button
+ * ========================================================================= */
+
+.mc-new-ticket-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 6px 14px;
+	margin: 8px;
+	border: 1px solid var(--soa-gold-primary, #F5A623);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--soa-gold-primary, #F5A623);
+	font-size: 13px;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s;
+}
+
+.mc-new-ticket-btn:hover {
+	background: var(--soa-gold-primary, #F5A623);
+	color: var(--soa-text-inverse, #0D0D0D);
+}
+
+/* =========================================================================
+ * 9. Scrollbar styling — dark theme
+ * ========================================================================= */
+
+.mc-board::-webkit-scrollbar,
+.mc-column::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.mc-board::-webkit-scrollbar-track,
+.mc-column::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.mc-board::-webkit-scrollbar-thumb,
+.mc-column::-webkit-scrollbar-thumb {
+	background: var(--soa-border-default, #2A2A2A);
+	border-radius: 4px;
+}
+
+.mc-board::-webkit-scrollbar-thumb:hover,
+.mc-column::-webkit-scrollbar-thumb:hover {
+	background: var(--soa-text-muted, #555555);
+}
+
+/* =========================================================================
+ * 10. Editor pane (full-width tab) styles
+ * ========================================================================= */
+
+.mc-editor-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	background: var(--soa-bg-canvas, #0A0A0A);
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+/* Header */
+
+.mc-editor-header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 16px 24px;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-bottom: 1px solid var(--soa-border-default, #2A2A2A);
+	flex-shrink: 0;
+}
+
+.mc-editor-title {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--soa-gold-primary, #F5A623);
+	letter-spacing: -0.01em;
+}
+
+.mc-editor-subtitle {
+	font-size: 13px;
+	color: var(--soa-text-muted, #555555);
+}
+
+.mc-editor-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.mc-editor-search {
+	min-width: 200px;
+	padding: 6px 12px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 6px;
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-primary, #E8E8E8);
+	font-size: 13px;
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	outline: none;
+	transition: border-color 0.15s;
+}
+
+.mc-editor-search:focus {
+	border-color: var(--soa-gold-primary, #F5A623);
+}
+
+.mc-editor-search::placeholder {
+	color: var(--soa-text-muted, #555555);
+}
+
+.mc-editor-select {
+	padding: 6px 12px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 6px;
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-primary, #E8E8E8);
+	font-size: 13px;
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	outline: none;
+	cursor: pointer;
+}
+
+.mc-editor-select:focus {
+	border-color: var(--soa-gold-primary, #F5A623);
+}
+
+.mc-editor-btn-primary {
+	padding: 6px 16px;
+	border: 1px solid var(--soa-gold-primary, #F5A623);
+	border-radius: 6px;
+	background: var(--soa-gold-primary, #F5A623);
+	color: var(--soa-bg-canvas, #0A0A0A);
+	font-size: 13px;
+	font-weight: 600;
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+}
+
+.mc-editor-btn-primary:hover {
+	background: var(--soa-gold-secondary, #B8860B);
+	border-color: var(--soa-gold-secondary, #B8860B);
+}
+
+/* Columns */
+
+.mc-editor-columns {
+	display: flex;
+	flex: 1;
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding: 16px 24px;
+	gap: 16px;
+}
+
+.mc-editor-column {
+	display: flex;
+	flex-direction: column;
+	min-width: 300px;
+	max-width: 400px;
+	flex: 1;
+	background: var(--soa-bg-secondary, #111111);
+	border-radius: 10px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	overflow: hidden;
+}
+
+.mc-editor-col-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--soa-border-default, #2A2A2A);
+	flex-shrink: 0;
+}
+
+.mc-editor-col-indicator {
+	width: 4px;
+	height: 20px;
+	border-radius: 2px;
+	flex-shrink: 0;
+}
+
+.mc-editor-col-title {
+	font-weight: 600;
+	font-size: 14px;
+	flex: 1;
+}
+
+.mc-editor-col-count {
+	font-size: 12px;
+	color: var(--soa-text-muted, #555555);
+	background: var(--soa-bg-elevated, #161616);
+	padding: 2px 10px;
+	border-radius: 12px;
+	flex-shrink: 0;
+}
+
+.mc-editor-col-tickets {
+	flex: 1;
+	overflow-y: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.mc-editor-col-tickets::-webkit-scrollbar {
+	width: 6px;
+}
+
+.mc-editor-col-tickets::-webkit-scrollbar-thumb {
+	background: var(--soa-border-default, #2A2A2A);
+	border-radius: 3px;
+}
+
+.mc-editor-col-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 32px 16px;
+	color: var(--soa-text-muted, #555555);
+	font-size: 13px;
+	font-style: italic;
+}
+
+/* Cards */
+
+.mc-editor-card {
+	background: var(--soa-bg-elevated, #161616);
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 8px;
+	padding: 14px 16px;
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.mc-editor-card:hover {
+	border-color: var(--soa-gold-primary, #F5A623);
+	box-shadow: 0 0 12px var(--soa-gold-glow, rgba(245, 166, 35, 0.12));
+	transform: translateY(-1px);
+}
+
+.mc-editor-card:focus {
+	outline: 2px solid var(--soa-gold-primary, #F5A623);
+	outline-offset: -2px;
+}
+
+.mc-editor-card-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.mc-editor-card-priority {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	margin-top: 3px;
+}
+
+.mc-editor-card-title {
+	font-weight: 600;
+	font-size: 14px;
+	line-height: 1.3;
+	flex: 1;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+}
+
+.mc-editor-card-id {
+	font-size: 11px;
+	color: var(--soa-text-muted, #555555);
+	margin-bottom: 8px;
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+}
+
+.mc-editor-card-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.mc-editor-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 16px;
+	color: #FFFFFF;
+}
+
+.mc-editor-badge-model {
+	background: #1E293B;
+	color: #93C5FD;
+}
+
+.mc-editor-card-agent {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--soa-text-secondary, #888888);
+	margin-bottom: 6px;
+}
+
+.mc-editor-card-agent-icon {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--soa-bg-hover, #1A1A1A);
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--soa-gold-primary, #F5A623);
+}
+
+.mc-editor-card-meta {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 12px;
+	color: var(--soa-text-muted, #555555);
+	margin-top: 6px;
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+}
+
+.mc-editor-card-labels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 8px;
+}
+
+.mc-editor-label-tag {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	line-height: 18px;
+	border: 1px solid var(--soa-gold-secondary, #B8860B);
+	color: var(--soa-gold-primary, #F5A623);
+	background: transparent;
+}
+
+/* Summary bar */
+
+.mc-editor-summary {
+	display: flex;
+	align-items: center;
+	gap: 24px;
+	padding: 10px 24px;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-top: 1px solid var(--soa-border-default, #2A2A2A);
+	font-size: 12px;
+	color: var(--soa-text-muted, #555555);
+	flex-shrink: 0;
+}
+
+.mc-editor-summary-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.mc-editor-summary-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}

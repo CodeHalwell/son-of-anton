@@ -102,6 +102,7 @@ import { SyncDescriptor } from '../platform/instantiation/common/descriptors.js'
 registerSingleton(IUserDataInitializationService, new SyncDescriptor(UserDataInitializationService, [[]], true));
 
 
+
 //#endregion
 
 

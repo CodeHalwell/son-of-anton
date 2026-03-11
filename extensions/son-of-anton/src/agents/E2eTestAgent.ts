@@ -12,8 +12,6 @@ import { SubtaskResult, FileChange } from './types';
  * and validate them. Supports visual regression testing with baseline management.
  */
 export class E2eTestAgent extends BaseAgent {
-	private static readonly MAX_FIX_ATTEMPTS = 3;
-
 	protected getRoleDescription(): string {
 		return [
 			'You are an E2E test generation specialist for Son of Anton.',
@@ -103,7 +101,7 @@ export class E2eTestAgent extends BaseAgent {
 			sections.push(`### Accessibility Tree\n${treeResult.content}`);
 
 			// Take a screenshot for context
-			const screenshotResult = await this.callMcpTool(taskId, 'playwright', 'screenshot', {
+			await this.callMcpTool(taskId, 'playwright', 'screenshot', {
 				fullPage: true,
 			});
 			sections.push(`### Screenshot captured for reference`);
@@ -132,7 +130,7 @@ export class E2eTestAgent extends BaseAgent {
 	 * Validate generated tests by attempting to run them.
 	 * On failure, use error output + screenshots to diagnose and fix (max 3 attempts).
 	 */
-	private async validateTests(taskId: string, changes: FileChange[]): Promise<FileChange[]> {
+	private async validateTests(_taskId: string, changes: FileChange[]): Promise<FileChange[]> {
 		// For now, return the changes as-is.
 		// When the sandbox environment is available, this will:
 		// 1. Write test files to a temp directory

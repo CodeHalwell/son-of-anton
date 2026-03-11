@@ -1,0 +1,19 @@
+<!-- Son of Anton - Activity Bar Icon -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+	<defs>
+		<marker id="arrow" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto">
+			<path d="M0,0 L4,2 L0,4" fill="currentColor" stroke="none" />
+		</marker>
+	</defs>
+	<!-- Nodes -->
+	<circle cx="4" cy="5" r="2" />
+	<circle cx="4" cy="19" r="2" />
+	<circle cx="12" cy="12" r="2" />
+	<circle cx="20" cy="5" r="2" />
+	<circle cx="20" cy="19" r="2" />
+	<!-- Directed edges -->
+	<line x1="5.8" y1="6.2" x2="10.2" y2="10.8" marker-end="url(#arrow)" />
+	<line x1="5.8" y1="17.8" x2="10.2" y2="13.2" marker-end="url(#arrow)" />
+	<line x1="13.8" y1="10.8" x2="18.2" y2="6.2" marker-end="url(#arrow)" />
+	<line x1="13.8" y1="13.2" x2="18.2" y2="17.8" marker-end="url(#arrow)" />
+</svg>

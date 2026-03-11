@@ -113,7 +113,6 @@ export class PerformanceProfiler {
 	private readonly queryCacheTtlMs = 300_000; // 5 minutes
 	private readonly coldEvictionMs = 600_000; // 10 minutes
 
-	private profilingActive = false;
 	private currentScenario: ProfileScenario | undefined;
 	private memoryCheckTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -135,8 +134,6 @@ export class PerformanceProfiler {
 			timestamp: Date.now(),
 		};
 
-		this.profilingActive = true;
-
 		// Take periodic memory snapshots
 		this.memoryCheckTimer = setInterval(() => {
 			if (this.currentScenario) {
@@ -154,7 +151,6 @@ export class PerformanceProfiler {
 			this.memoryCheckTimer = undefined;
 		}
 
-		this.profilingActive = false;
 		const scenario = this.currentScenario;
 		if (scenario) {
 			this.scenarios.push(scenario);
@@ -167,7 +163,7 @@ export class PerformanceProfiler {
 	 * Take a memory snapshot of the current process.
 	 */
 	takeMemorySnapshot(): MemorySnapshot {
-		const memUsage = process.memoryUsage();
+		const memUsage = (process as unknown as NodeJS.Process).memoryUsage();
 		const snapshot: MemorySnapshot = {
 			timestamp: Date.now(),
 			processName: 'extension-host',
@@ -188,7 +184,7 @@ export class PerformanceProfiler {
 	 * Record a CPU usage sample.
 	 */
 	recordCpuSample(processName: string): CpuSample {
-		const cpuUsage = process.cpuUsage();
+		const cpuUsage = (process as unknown as NodeJS.Process).cpuUsage();
 		const sample: CpuSample = {
 			timestamp: Date.now(),
 			processName,
@@ -431,7 +427,7 @@ export class PerformanceProfiler {
 			);
 		}
 
-		const memUsage = process.memoryUsage();
+		const memUsage = (process as unknown as NodeJS.Process).memoryUsage();
 		const rssMb = memUsage.rss / (1024 * 1024);
 		if (rssMb > this.budget.maxMemoryMb) {
 			violations.push(
@@ -473,7 +469,7 @@ export class PerformanceProfiler {
 		lines.push('');
 
 		// Current memory
-		const memUsage = process.memoryUsage();
+		const memUsage = (process as unknown as NodeJS.Process).memoryUsage();
 		lines.push('### Memory Usage');
 		lines.push(`- RSS: ${(memUsage.rss / 1024 / 1024).toFixed(1)}MB`);
 		lines.push(`- Heap Used: ${(memUsage.heapUsed / 1024 / 1024).toFixed(1)}MB`);

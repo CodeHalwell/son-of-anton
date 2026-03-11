@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BaseAgent, AgentContext } from './BaseAgent';
-import { SubtaskResult, TokenUsage } from './types';
+import { SubtaskResult } from './types';
 
 /**
  * Code generation specialist.

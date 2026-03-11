@@ -1,0 +1,147 @@
+[
+  {
+    "timestamp": "2026-03-09T23:30:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Multi-provider LLM architecture — refactored LlmClient with provider abstraction",
+    "files": [
+      "extensions/son-of-anton/src/llm/types.ts",
+      "extensions/son-of-anton/src/llm/providers/MockProvider.ts",
+      "extensions/son-of-anton/src/llm/providers/AnthropicProvider.ts",
+      "extensions/son-of-anton/src/llm/providers/CopilotProvider.ts",
+      "extensions/son-of-anton/src/llm/providers/ModelRouterProvider.ts",
+      "extensions/son-of-anton/src/llm/LlmClient.ts"
+    ],
+    "summary": "Extracted LLM types to shared module. Created 4 providers: MockProvider (always available fallback with setup instructions), AnthropicProvider (direct API with updated model IDs), CopilotProvider (VS Code LM API for Copilot/Claude Code/Codex subscriptions), ModelRouterProvider (routes through model-router service). Refactored LlmClient to use provider abstraction with auto-detection. Updated model IDs to claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001."
+  },
+  {
+    "timestamp": "2026-03-09T23:30:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Real MCP client implementation replacing stub",
+    "files": [
+      "extensions/son-of-anton/src/mcp/McpClient.ts",
+      "extensions/son-of-anton/src/extension.ts"
+    ],
+    "summary": "Replaced 49-line McpClient stub with full SSE transport implementation. Connects to MCP gateway on port 3100. Supports JSON-RPC tool calls, tool discovery, exponential backoff reconnection, and graceful degradation when gateway is unreachable. Wired connect/dispose lifecycle into extension activation."
+  },
+  {
+    "timestamp": "2026-03-09T23:30:00Z",
+    "tier": 1,
+    "type": "config",
+    "description": "Added provider configuration settings to extension manifest",
+    "files": [
+      "extensions/son-of-anton/package.json"
+    ],
+    "summary": "Added sota.provider (auto/copilot/anthropic/model-router/mock), sota.modelRouterUrl, and sota.mcpGatewayUrl configuration settings."
+  },
+  {
+    "timestamp": "2026-03-09T23:30:00Z",
+    "tier": 1,
+    "type": "bugfix",
+    "description": "Fixed duplicate variable declaration in MCP gateway memoryQuery tool",
+    "files": [
+      "services/mcp-gateway/src/tools/memoryQuery.ts"
+    ],
+    "summary": "Removed duplicate createQuery block that caused a build error in memoryQuery.ts."
+  },
+  {
+    "timestamp": "2026-03-10T08:00:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Son of Anton v2 visual identity — color tokens, theme, fonts, icons",
+    "files": [
+      "src/vs/sessions/contrib/theme/browser/colorTokens.css",
+      "src/vs/sessions/contrib/theme/browser/fonts.css",
+      "src/vs/sessions/contrib/theme/browser/themeContribution.ts",
+      "extensions/son-of-anton/themes/son-of-anton-dark.json",
+      "resources/fonts/geist/GeistVF.woff2",
+      "resources/fonts/geist/GeistMonoVF.woff2",
+      "resources/icons/son-of-anton/*.svg"
+    ],
+    "summary": "32 CSS custom properties, 22 registered VS Code colors, 200+ theme overrides eliminating VS Code blue, Geist variable fonts, 7 custom SVG activity bar icons."
+  },
+  {
+    "timestamp": "2026-03-10T08:30:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Mission Control — agile kanban board with full ticket management",
+    "files": [
+      "src/vs/sessions/contrib/missionControl/common/missionControlTypes.ts",
+      "src/vs/sessions/contrib/missionControl/browser/missionControlService.ts",
+      "src/vs/sessions/contrib/missionControl/browser/missionControlView.ts",
+      "src/vs/sessions/contrib/missionControl/browser/taskCard.ts",
+      "src/vs/sessions/contrib/missionControl/browser/media/missionControl.css",
+      "src/vs/sessions/contrib/missionControl/browser/missionControl.contribution.ts"
+    ],
+    "summary": "5-column kanban (Queued/Running/Review/Complete/Failed), 5 ticket types (Epic/Story/Subtask/Bug/Spike), full CRUD with counter-based IDs, persistence to .son-of-anton/board.json, filter bar, ARIA roles, task cards with metrics and acceptance criteria."
+  },
+  {
+    "timestamp": "2026-03-10T08:45:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "DAG Explorer — dependency and task graph with BFS impact analysis",
+    "files": [
+      "src/vs/sessions/contrib/dagExplorer/common/dagTypes.ts",
+      "src/vs/sessions/contrib/dagExplorer/browser/dagExplorerService.ts",
+      "src/vs/sessions/contrib/dagExplorer/browser/dagExplorerView.ts",
+      "src/vs/sessions/contrib/dagExplorer/browser/dagExplorer.contribution.ts"
+    ],
+    "summary": "Three-layer DAG (Dependency/Task/Impact), SVG-based graph rendering, BFS impact analysis, node detail panel, layer selector toolbar."
+  },
+  {
+    "timestamp": "2026-03-10T09:00:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Terminal Blocks, Title Bar, Mode Toggle, Welcome Screen, Spec Renderer",
+    "files": [
+      "src/vs/sessions/contrib/terminalBlocks/**",
+      "src/vs/sessions/contrib/titleBar/**",
+      "src/vs/sessions/contrib/modeToggle/**",
+      "src/vs/sessions/contrib/welcome/**",
+      "src/vs/sessions/contrib/specRenderer/**"
+    ],
+    "summary": "Terminal blocks with OSC metadata parsing and agent attribution. Title bar with model indicator, context bar, cost ticker, agent badge. Mode toggle via Cmd+Shift+M. Welcome screen with branded wordmark. Spec renderer with EARS clause cards and task checklists."
+  },
+  {
+    "timestamp": "2026-03-10T09:30:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Infrastructure foundations — Memory, Checkpoints, ACP types and services",
+    "files": [
+      "src/vs/sessions/contrib/memory/common/memoryTypes.ts",
+      "src/vs/sessions/contrib/memory/browser/memoryService.ts",
+      "src/vs/sessions/contrib/checkpoints/common/checkpointTypes.ts",
+      "src/vs/sessions/contrib/checkpoints/browser/checkpointService.ts",
+      "src/vs/sessions/contrib/acp/common/acpTypes.ts",
+      "src/vs/sessions/contrib/acp/browser/acpClientService.ts"
+    ],
+    "summary": "Hybrid memory with in-memory keyword search (SQLite/Docker backends TODO). In-memory checkpoint service (git plumbing TODO). ACP service with JSON-RPC 2.0 types and agent registry."
+  },
+  {
+    "timestamp": "2026-03-10T09:45:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "View container registrations — all surfaces visible in activity bar",
+    "files": [
+      "src/vs/sessions/contrib/missionControl/browser/missionControl.contribution.ts",
+      "src/vs/sessions/contrib/dagExplorer/browser/dagExplorer.contribution.ts",
+      "src/vs/sessions/contrib/memory/browser/memory.contribution.ts",
+      "src/vs/sessions/contrib/specRenderer/browser/specRenderer.contribution.ts",
+      "src/vs/sessions/contrib/memory/browser/memoryBrowserView.ts",
+      "src/vs/sessions/contrib/memory/browser/media/memoryBrowser.css"
+    ],
+    "summary": "Registered view containers with Codicon icons (project, graphLine, database, notebook) in sessions sidebar. Created MemoryBrowserView pane with search input and results list."
+  },
+  {
+    "timestamp": "2026-03-10T10:00:00Z",
+    "tier": 1,
+    "type": "feature",
+    "description": "Integration wiring — event-driven connections between all subsystems",
+    "files": [
+      "src/vs/sessions/contrib/integration/browser/integrationWiring.ts",
+      "src/vs/sessions/sessions.common.main.ts"
+    ],
+    "summary": "IntegrationWiringContribution connects Mission Control to Checkpoints (auto-checkpoint on Running), Memory (index completed tickets), DAG Explorer (update node status), and Title Bar (active agent count)."
+  }
+]

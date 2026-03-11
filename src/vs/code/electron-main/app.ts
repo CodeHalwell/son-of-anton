@@ -530,6 +530,75 @@ export class CodeApplication extends Disposable {
 			return this.resolveShellEnvironment(args, env, false);
 		});
 
+		// Son of Anton — CLI-based LLM generation via main process
+		// Tier 2: new IPC channel alongside existing bootstrap handlers
+		const SOA_ALLOWED_MODELS = new Set([
+			'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001',
+			'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307',
+		]);
+		const SOA_CLI_TIMEOUT_MS = 120_000;
+		const SOA_MAX_PROMPT_LENGTH = 100_000;
+
+		validatedIpcMain.handle('vscode:soaGenerateCli', async (_event, prompt: unknown, model?: unknown) => {
+			if (typeof prompt !== 'string' || prompt.length === 0) {
+				throw new Error('prompt must be a non-empty string');
+			}
+			if (prompt.length > SOA_MAX_PROMPT_LENGTH) {
+				throw new Error(`prompt exceeds maximum length of ${SOA_MAX_PROMPT_LENGTH} characters`);
+			}
+			const effectiveModel = typeof model === 'string' && SOA_ALLOWED_MODELS.has(model)
+				? model
+				: 'claude-sonnet-4-6';
+
+			const { spawn } = await import('child_process');
+			return new Promise<{ text: string; model: string; elapsedMs: number }>((resolve, reject) => {
+				const startTime = Date.now();
+				let settled = false;
+				const args = [
+					'--print',
+					'--model', effectiveModel,
+					prompt,
+				];
+				const cleanEnv = { ...process.env };
+				delete cleanEnv['CLAUDECODE'];
+				const child = spawn('claude', args, {
+					stdio: ['ignore', 'pipe', 'pipe'],
+					env: cleanEnv,
+				});
+
+				const timeout = setTimeout(() => {
+					if (!settled) {
+						settled = true;
+						child.kill('SIGTERM');
+						reject(new Error(`claude CLI timed out after ${SOA_CLI_TIMEOUT_MS}ms`));
+					}
+				}, SOA_CLI_TIMEOUT_MS);
+
+				let stdout = '';
+				let stderr = '';
+				child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+				child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+				child.on('error', (err: Error) => {
+					if (!settled) {
+						settled = true;
+						clearTimeout(timeout);
+						reject(new Error(`Failed to start claude CLI: ${err.message}`));
+					}
+				});
+				child.on('close', (code: number | null) => {
+					if (!settled) {
+						settled = true;
+						clearTimeout(timeout);
+						if (code !== 0 && !stdout) {
+							reject(new Error(stderr.trim() || `claude CLI exited with code ${code}`));
+						} else {
+							resolve({ text: stdout, model: effectiveModel, elapsedMs: Date.now() - startTime });
+						}
+					}
+				});
+			});
+		});
+
 		validatedIpcMain.on('vscode:toggleDevTools', event => event.sender.toggleDevTools());
 		validatedIpcMain.on('vscode:openDevTools', event => event.sender.openDevTools());
 

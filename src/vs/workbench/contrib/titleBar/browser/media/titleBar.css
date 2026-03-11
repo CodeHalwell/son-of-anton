@@ -1,0 +1,143 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * Title bar widget stylesheet.
+ *
+ * Uses Son of Anton colour tokens defined in colorTokens.css.
+ * UI text uses the proportional --soa-font-ui stack (Geist).
+ */
+
+/* =========================================================================
+ * 1. Widget container
+ * ========================================================================= */
+
+.soa-titlebar-widget {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 100%;
+	padding: 0 12px;
+	gap: 16px;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+/* =========================================================================
+ * 2. Wordmark (left section)
+ * ========================================================================= */
+
+.soa-titlebar-wordmark {
+	font-family: var(--soa-font-ui, 'Geist', system-ui, sans-serif);
+	font-weight: 500;
+	font-size: 13px;
+	letter-spacing: 0.05em;
+	color: var(--soa-amber-gold, #F5A623);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+/* =========================================================================
+ * 3. Model indicator (center section)
+ * ========================================================================= */
+
+.soa-titlebar-model {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 10px;
+	border-radius: 10px;
+	background: var(--soa-surface-elevated, #1A1A1A);
+	color: var(--soa-gold-muted, #B8860B);
+	font-family: var(--soa-font-ui, 'Geist', system-ui, sans-serif);
+	font-size: 11px;
+	font-weight: 500;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+/* =========================================================================
+ * 4. Right section container
+ * ========================================================================= */
+
+.soa-titlebar-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 16px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+/* =========================================================================
+ * 5. Context usage bar
+ * ========================================================================= */
+
+.soa-titlebar-context {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+}
+
+.soa-titlebar-context-bar {
+	width: 60px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--soa-surface-inset, #2A2A2A);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.soa-titlebar-context-fill {
+	height: 100%;
+	border-radius: 2px;
+	background: var(--soa-amber-gold, #F5A623);
+	transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.soa-titlebar-context-fill.critical {
+	background: var(--soa-danger, #E74C3C);
+}
+
+.soa-titlebar-context-label {
+	font-family: var(--soa-font-ui, 'Geist', system-ui, sans-serif);
+	font-size: 9px;
+	color: var(--soa-text-muted, #666);
+	white-space: nowrap;
+}
+
+/* =========================================================================
+ * 6. Cost ticker
+ * ========================================================================= */
+
+.soa-titlebar-cost {
+	font-family: var(--soa-font-mono, 'Geist Mono', 'SF Mono', 'Fira Code', monospace);
+	font-size: 11px;
+	color: var(--soa-gold-muted, #B8860B);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+/* =========================================================================
+ * 7. Active agents badge
+ * ========================================================================= */
+
+.soa-titlebar-agents {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 10px;
+	background: var(--soa-surface-elevated, #1A1A1A);
+	color: var(--soa-amber-gold, #F5A623);
+	font-family: var(--soa-font-ui, 'Geist', system-ui, sans-serif);
+	font-size: 11px;
+	font-weight: 500;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.soa-titlebar-agents.hidden {
+	display: none;
+}

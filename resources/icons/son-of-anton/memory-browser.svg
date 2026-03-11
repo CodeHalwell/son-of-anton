@@ -1,0 +1,16 @@
+<!-- Son of Anton - Activity Bar Icon -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+	<!-- Top cylinder -->
+	<ellipse cx="12" cy="4" rx="7" ry="2.5" />
+	<line x1="5" y1="4" x2="5" y2="9" />
+	<line x1="19" y1="4" x2="19" y2="9" />
+	<ellipse cx="12" cy="9" rx="7" ry="2.5" />
+	<!-- Middle cylinder -->
+	<line x1="5" y1="9" x2="5" y2="14" />
+	<line x1="19" y1="9" x2="19" y2="14" />
+	<ellipse cx="12" cy="14" rx="7" ry="2.5" />
+	<!-- Bottom cylinder -->
+	<line x1="5" y1="14" x2="5" y2="19" />
+	<line x1="19" y1="14" x2="19" y2="19" />
+	<ellipse cx="12" cy="19" rx="7" ry="2.5" />
+</svg>

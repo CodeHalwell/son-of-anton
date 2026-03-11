@@ -442,3 +442,47 @@ import './contrib/editTelemetry/browser/editTelemetry.contribution.js';
 import './contrib/opener/browser/opener.contribution.js';
 
 //#endregion
+
+
+//#region --- Son of Anton v2 contributions
+
+// Mission Control — agile board and task orchestration
+import './contrib/missionControl/browser/missionControl.contribution.js';
+
+// DAG Explorer — dependency and task graph visualisation
+import './contrib/dagExplorer/browser/dagExplorer.contribution.js';
+
+// Terminal Blocks — semantic terminal with agent attribution
+import './contrib/terminalBlocks/browser/terminalBlocks.contribution.js';
+
+// Checkpoints — hybrid git + filesystem snapshots
+import './contrib/checkpoints/browser/checkpoints.contribution.js';
+
+// Hybrid Memory — knowledge graph and vector search
+import './contrib/memory/browser/memory.contribution.js';
+
+// ACP — Agent Client Protocol for external agents
+import './contrib/acp/browser/acp.contribution.js';
+
+// Spec Renderer — EARS requirements and task checklists
+import './contrib/specRenderer/browser/specRenderer.contribution.js';
+
+// Title Bar State — model indicator, cost ticker, context bar
+import './contrib/titleBar/browser/titleBar.contribution.js';
+
+// Theme — Son of Anton color tokens
+import './contrib/theme/browser/themeContribution.js';
+
+// Agent Configuration — provider and model assignment per agent
+import './contrib/agentConfig/browser/agentConfig.contribution.js';
+
+// Guidance — knowledge base, workflows, rules, and agent roles
+import './contrib/guidance/browser/guidance.contribution.js';
+
+// Anton Chat — orchestrator chat interface
+import './contrib/antonChat/browser/antonChat.contribution.js';
+
+// Integration Wiring — connects all v2 subsystems together
+import './contrib/integration/browser/integrationWiring.js';
+
+//#endregion

@@ -1,0 +1,40 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Geist — UI font for Son of Anton */
+@font-face {
+	font-family: 'Geist';
+	src: url('../../../../../resources/fonts/geist/GeistVF.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Geist Mono — Editor and terminal font */
+@font-face {
+	font-family: 'Geist Mono';
+	src: url('../../../../../resources/fonts/geist/GeistMonoVF.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Apply Geist to sessions workbench UI */
+.sessions-workbench {
+	font-family: 'Geist', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Mission Control uses proportional type */
+.mission-control,
+.mission-control * {
+	font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Terminal and code blocks use Geist Mono */
+.sessions-terminal,
+.spec-code-block,
+.mc-task-trace {
+	font-family: 'Geist Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}

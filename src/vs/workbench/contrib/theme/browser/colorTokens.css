@@ -1,0 +1,154 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * Son of Anton — CSS custom property colour tokens.
+ *
+ * Import this file at the root of every session contribution that renders UI.
+ * All values are defined on :root so they cascade naturally into shadow DOM
+ * and nested components without repetition.
+ *
+ * Token groups:
+ *   --soa-bg-*       Background surfaces (darkest → elevated)
+ *   --soa-border-*   Border colours
+ *   --soa-gold-*     Gold/amber structural palette (interactive, chrome, syntax)
+ *   --soa-text-*     Foreground text
+ *   --soa-status-*   Semantic status fill colours
+ *   --soa-mc-*       Mission Control agent-status badge colours
+ *   --soa-model-*    Model badge colours (Opus / Sonnet / Haiku)
+ *   --soa-font-*     Font-family stacks
+ */
+
+:root {
+
+	/* -------------------------------------------------------------------------
+	 * Backgrounds
+	 * ---------------------------------------------------------------------- */
+
+	/** Primary editor and main surface background. */
+	--soa-bg-primary: #0D0D0D;
+
+	/** Mission Control canvas background. */
+	--soa-bg-secondary: #111111;
+
+	/** Cards, panels, and elevated surfaces. */
+	--soa-bg-elevated: #161616;
+
+	/** Hover states and active tabs. */
+	--soa-bg-hover: #1A1A1A;
+
+	/** Input field backgrounds. */
+	--soa-bg-input: #141414;
+
+	/** DAG canvas and title bar background. */
+	--soa-bg-canvas: #0A0A0A;
+
+	/* -------------------------------------------------------------------------
+	 * Borders
+	 * ---------------------------------------------------------------------- */
+
+	/** Default border for panels, cards, and separators. */
+	--soa-border-default: #2A2A2A;
+
+	/** Subtle border — used for very low-contrast dividers. */
+	--soa-border-subtle: #1E1E1E;
+
+	/** Focus ring — gold to match the interactive palette. */
+	--soa-border-focus: #F5A623;
+
+	/* -------------------------------------------------------------------------
+	 * Gold / Amber — structural, not merely decorative
+	 * ---------------------------------------------------------------------- */
+
+	/** Interactive, active, and selected states. */
+	--soa-gold-primary: #F5A623;
+
+	/** Structural chrome and inactive gold elements. */
+	--soa-gold-secondary: #B8860B;
+
+	/** Syntax highlights and EARS keywords. */
+	--soa-gold-dim: #C8962A;
+
+	/** Drop shadow / glow effect for gold elements. */
+	--soa-gold-glow: rgba(245, 166, 35, 0.15);
+
+	/* -------------------------------------------------------------------------
+	 * Text
+	 * ---------------------------------------------------------------------- */
+
+	/** Primary readable text on dark surfaces. */
+	--soa-text-primary: #E8E8E8;
+
+	/** Secondary / supporting text. */
+	--soa-text-secondary: #888888;
+
+	/** Muted / placeholder / disabled text. */
+	--soa-text-muted: #555555;
+
+	/** Inverse text — for use on light or gold backgrounds. */
+	--soa-text-inverse: #0D0D0D;
+
+	/* -------------------------------------------------------------------------
+	 * Status colours — background fills for status badges and banners
+	 * ---------------------------------------------------------------------- */
+
+	/** Success state background. */
+	--soa-status-success: #2A5A2A;
+
+	/** Error state background. */
+	--soa-status-error: #5A2A2A;
+
+	/** Warning state background. */
+	--soa-status-warning: #5A4A0A;
+
+	/** Informational state background. */
+	--soa-status-info: #2A3A5A;
+
+	/* -------------------------------------------------------------------------
+	 * Mission Control — agent status badge colours
+	 * ---------------------------------------------------------------------- */
+
+	/** Agent is queued and waiting to run. */
+	--soa-mc-status-queued: #808080;
+
+	/** Agent is actively running. */
+	--soa-mc-status-running: #F5A623;
+
+	/** Agent execution is paused. */
+	--soa-mc-status-paused: #9B59B6;
+
+	/** Agent output is awaiting human review. */
+	--soa-mc-status-review: #E67E22;
+
+	/** Agent has completed successfully. */
+	--soa-mc-status-complete: #27AE60;
+
+	/** Agent has terminated with a failure. */
+	--soa-mc-status-failed: #E74C3C;
+
+	/* -------------------------------------------------------------------------
+	 * Model badges — visual indicator for routed LLM model
+	 * ---------------------------------------------------------------------- */
+
+	/** Opus — highest-capability model badge. */
+	--soa-model-opus: #7B2D8B;
+
+	/** Sonnet — balanced capability/cost model badge. */
+	--soa-model-sonnet: #2D5B8B;
+
+	/** Haiku — fastest/cheapest model badge. */
+	--soa-model-haiku: #2D8B5B;
+
+	/* -------------------------------------------------------------------------
+	 * Typography — font-family stacks
+	 * ---------------------------------------------------------------------- */
+
+	/** UI font stack — proportional, used for all interface text. */
+	--soa-font-ui: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+
+	/** Monospace font stack — used for code, terminals, and identifiers. */
+	--soa-font-mono: 'Geist Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+}

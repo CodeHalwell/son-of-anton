@@ -220,7 +220,7 @@ export class ModelRouter {
 	evaluateExperiments(): Array<{ taskCategory: TaskCategory; winner: ModelId; reason: string }> {
 		const promotions: Array<{ taskCategory: TaskCategory; winner: ModelId; reason: string }> = [];
 
-		for (const [key, experiment] of this.experiments.entries()) {
+		for (const [_key, experiment] of this.experiments.entries()) {
 			if (experiment.totalTrials < experiment.minTrialsForDecision) {
 				continue;
 			}

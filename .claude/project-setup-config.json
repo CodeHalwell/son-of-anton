@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "bundled": ["context7", "github", "docker-mcp-toolkit"],
+    "installed": ["playwright"],
+    "skipped": []
+  },
+  "githubPatConfigured": false,
+  "setupDate": "2026-03-09T00:00:00Z",
+  "projectType": "vscode-fork",
+  "primaryStack": "typescript-nodejs"
+}

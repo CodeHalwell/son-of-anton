@@ -1,0 +1,88 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "coderabbit@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/project-context.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/history-init.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/commit-message.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/secrets-scan.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ts-no-js.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ts-protect.sh"
+          },
+          {
+            "type": "prompt",
+            "prompt": "Check if this file modification requires Tier 2 or Tier 3 classification. If the file being modified is an existing VS Code core file (i.e., it already exists in src/vs/ and is not a new Son of Anton file in src/vs/sessions/), warn that this is at least Tier 2 and may require human review before merging. If the file is a new file (being created for the first time) or is inside services/, extensions/, or src/vs/sessions/, it is Tier 1 and no warning is needed. If a warning is appropriate, output a concise reminder stating the tier and that human review is required per the SoA modification tier policy."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Run TypeScript compilation check: 'npm run compile-check-ts-native' in the project root. If there are compilation errors, return {\"ok\": false, \"reason\": \"<first 20 lines of errors>\"}. Check stop_hook_active first — if true, exit immediately.",
+            "timeout": 180
+          },
+          {
+            "type": "prompt",
+            "prompt": "Before finishing, check if any medium-to-large changes were made during this session that aren't yet recorded in .history/changes.json. If there are unrecorded significant changes (new files, API changes, refactors, bug fixes, config changes, etc.), remind the agent to update the history before completing. If all significant changes are already recorded, or only trivial changes were made, respond with nothing."
+          },
+          {
+            "type": "prompt",
+            "prompt": "Before finishing, write a retrospective entry. Read .history/changes.json for changes made this session. Then append a session entry to .history/retrospective.md with these sections: '## Session: <current ISO timestamp>', '### What went well' (things that worked on first try, clean implementations), '### What didn't go well' (rework, failed approaches, unexpected issues), '### Decisions made' (architectural or design choices worth recording), '### Lessons for next session' (actionable advice for future work). If .history/retrospective.md doesn't exist, create it with a '# Project Retrospective' header first. Keep entries concise — 2-4 bullet points per section. If only trivial changes were made, respond with nothing."
+          }
+        ]
+      }
+    ]
+  }
+}

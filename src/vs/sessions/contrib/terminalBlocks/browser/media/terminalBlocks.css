@@ -1,0 +1,299 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * Terminal Blocks stylesheet.
+ *
+ * Dark theme: #0D0D0D background, #161616 cards, #2A2A2A borders.
+ * Left-border colours encode block kind (agent, build, checkpoint, etc.).
+ */
+
+/* =========================================================================
+ * 1. Block container
+ * ========================================================================= */
+
+.tb-block {
+	background: #161616;
+	margin: 4px 0;
+	padding: 8px 12px;
+	border-radius: 4px;
+	border-left: 3px solid #3A3A3A;
+	position: relative;
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.tb-block:hover {
+	box-shadow: 0 0 8px rgba(245, 166, 35, 0.08);
+}
+
+/* Keyboard focus ring */
+.tb-block:focus {
+	outline: 2px solid #F5A623;
+	outline-offset: 1px;
+}
+
+.tb-block:focus:not(:focus-visible) {
+	outline: none;
+}
+
+.tb-block:focus-visible {
+	outline: 2px solid #F5A623;
+	outline-offset: 1px;
+}
+
+/* =========================================================================
+ * 2. Block kind left-border colours
+ * ========================================================================= */
+
+.tb-block.tb-kind-manual {
+	border-left-color: #2A2A2A;
+}
+
+.tb-block.tb-kind-agent {
+	border-left-color: #F5A623;
+}
+
+.tb-block.tb-kind-build-pass {
+	border-left-color: #3FB950;
+}
+
+.tb-block.tb-kind-build-fail {
+	border-left-color: #F85149;
+}
+
+.tb-block.tb-kind-checkpoint {
+	border-left-color: #B8860B;
+}
+
+.tb-block.tb-kind-system {
+	border-left-color: #2A2A2A;
+}
+
+/* =========================================================================
+ * 3. Running block pulse animation
+ * ========================================================================= */
+
+@keyframes tb-pulse {
+	0%   { border-left-color: #F5A623; }
+	50%  { border-left-color: #7A5311; }
+	100% { border-left-color: #F5A623; }
+}
+
+.tb-block.tb-running {
+	animation: tb-pulse 2s ease-in-out infinite;
+}
+
+/* =========================================================================
+ * 4. Header
+ * ========================================================================= */
+
+.tb-block-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+	font-family: var(--soa-font-ui);
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.tb-block-header .tb-timestamp {
+	color: #666666;
+	margin-left: auto;
+	font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================================
+ * 5. Agent attribution badge
+ * ========================================================================= */
+
+.tb-agent-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.tb-agent-badge .tb-agent-name {
+	color: #F5A623;
+	font-weight: 600;
+}
+
+/* Model badge — pill with colour per model tier */
+
+.tb-model-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 6px;
+	border-radius: 8px;
+	font-size: 10px;
+	font-family: var(--soa-font-ui);
+	font-weight: 500;
+	color: #FFFFFF;
+	background: #444444;
+}
+
+.tb-model-badge--opus {
+	background: #7B2D8B;
+}
+
+.tb-model-badge--sonnet {
+	background: #2D5B8B;
+}
+
+.tb-model-badge--haiku {
+	background: #2D8B5B;
+}
+
+.tb-model-badge--default {
+	background: #444444;
+}
+
+/* =========================================================================
+ * 6. Command
+ * ========================================================================= */
+
+.tb-block-command {
+	font-family: var(--soa-font-mono);
+	font-size: 13px;
+	line-height: 20px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	color: #D4D4D4;
+	padding: 2px 0;
+}
+
+/* =========================================================================
+ * 7. Output — collapse/expand with animation
+ * ========================================================================= */
+
+.tb-block-output-wrapper {
+	overflow: hidden;
+	max-height: 500px;
+	transition: max-height 0.25s ease-in-out, padding 0.25s ease-in-out;
+	padding: 4px 0 0 0;
+}
+
+.tb-block-output-wrapper.tb-collapsed {
+	max-height: 0;
+	padding: 0;
+}
+
+.tb-block-output {
+	font-family: var(--soa-font-mono);
+	font-size: 12px;
+	line-height: 18px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	color: #AAAAAA;
+}
+
+/* Toggle button */
+
+.tb-block-output-toggle {
+	display: inline-block;
+	cursor: pointer;
+	color: #888888;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	margin-top: 2px;
+	user-select: none;
+	background: none;
+	border: none;
+	padding: 2px 4px;
+	border-radius: 3px;
+	transition: color 0.15s, background 0.15s;
+}
+
+.tb-block-output-toggle:hover {
+	color: #D4D4D4;
+	background: #1A1A1A;
+}
+
+.tb-block-output-toggle:focus-visible {
+	outline: 2px solid #F5A623;
+	outline-offset: 1px;
+}
+
+/* =========================================================================
+ * 8. Metadata (hover reveal)
+ * ========================================================================= */
+
+.tb-block-metadata {
+	display: none;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	color: #666666;
+	margin-top: 4px;
+	gap: 12px;
+}
+
+.tb-block:hover .tb-block-metadata,
+.tb-block:focus-within .tb-block-metadata {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+/* =========================================================================
+ * 9. Action buttons (hover / focus reveal)
+ * ========================================================================= */
+
+.tb-block-actions {
+	display: none;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.tb-block:hover .tb-block-actions,
+.tb-block:focus-within .tb-block-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.tb-block-actions button {
+	background: none;
+	border: 1px solid #444444;
+	border-radius: 3px;
+	color: #AAAAAA;
+	font-family: var(--soa-font-ui);
+	font-size: 11px;
+	padding: 2px 8px;
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.tb-block-actions button:hover {
+	background: #1A1A1A;
+	color: #D4D4D4;
+	border-color: #666666;
+}
+
+.tb-block-actions button:focus-visible {
+	outline: 2px solid #F5A623;
+	outline-offset: 1px;
+}
+
+/* =========================================================================
+ * 10. Scrollbar styling
+ * ========================================================================= */
+
+.tb-block-output-wrapper::-webkit-scrollbar {
+	width: 6px;
+}
+
+.tb-block-output-wrapper::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.tb-block-output-wrapper::-webkit-scrollbar-thumb {
+	background: #2A2A2A;
+	border-radius: 3px;
+}
+
+.tb-block-output-wrapper::-webkit-scrollbar-thumb:hover {
+	background: #555555;
+}

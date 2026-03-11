@@ -1,0 +1,470 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * DAG Explorer — Professional graph visualization stylesheet.
+ *
+ * Uses Son of Anton colour tokens. All UI text uses the proportional
+ * --soa-font-ui stack (Geist) for chrome, monospace for node labels.
+ */
+
+/* =========================================================================
+ * 1. Body layout
+ * ========================================================================= */
+
+.dag-explorer-body {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	background: var(--soa-bg-canvas, #0A0A0A);
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+/* =========================================================================
+ * 2. Toolbar
+ * ========================================================================= */
+
+.dag-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 10px 16px;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-bottom: 1px solid var(--soa-border-default, #2A2A2A);
+	flex-shrink: 0;
+}
+
+.dag-toolbar-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--soa-text-muted, #555555);
+	margin-right: 8px;
+}
+
+.dag-toolbar-button {
+	padding: 5px 14px;
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--soa-text-secondary, #888888);
+	font-size: 12px;
+	font-weight: 500;
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	outline: none;
+}
+
+.dag-toolbar-button:hover {
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-primary, #E8E8E8);
+	border-color: var(--soa-text-muted, #555555);
+}
+
+.dag-toolbar-button-active {
+	background: var(--soa-gold-primary, #F5A623);
+	color: var(--soa-bg-canvas, #0A0A0A);
+	border-color: var(--soa-gold-primary, #F5A623);
+	font-weight: 600;
+}
+
+.dag-toolbar-button-active:hover {
+	background: var(--soa-gold-secondary, #B8860B);
+	border-color: var(--soa-gold-secondary, #B8860B);
+}
+
+.dag-toolbar-separator {
+	width: 1px;
+	height: 20px;
+	background: var(--soa-border-default, #2A2A2A);
+	margin: 0 8px;
+}
+
+.dag-toolbar-stats {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	font-size: 11px;
+	color: var(--soa-text-muted, #555555);
+}
+
+.dag-toolbar-stat {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.dag-toolbar-stat-value {
+	color: var(--soa-text-secondary, #888888);
+	font-weight: 600;
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+}
+
+/* =========================================================================
+ * 3. Placeholder / empty state
+ * ========================================================================= */
+
+.dag-placeholder {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	gap: 16px;
+	padding: 48px;
+	text-align: center;
+}
+
+.dag-placeholder-icon {
+	width: 64px;
+	height: 64px;
+	border-radius: 16px;
+	background: var(--soa-bg-elevated, #161616);
+	border: 1px solid var(--soa-border-default, #2A2A2A);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dag-placeholder-icon svg {
+	width: 32px;
+	height: 32px;
+	opacity: 0.4;
+}
+
+.dag-placeholder-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--soa-text-primary, #E8E8E8);
+	margin: 0;
+}
+
+.dag-placeholder-desc {
+	font-size: 13px;
+	color: var(--soa-text-muted, #555555);
+	max-width: 360px;
+	line-height: 1.5;
+}
+
+.dag-placeholder-hints {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.dag-placeholder-hint {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--soa-text-secondary, #888888);
+}
+
+.dag-placeholder-hint-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--soa-gold-primary, #F5A623);
+	flex-shrink: 0;
+}
+
+/* =========================================================================
+ * 4. SVG canvas
+ * ========================================================================= */
+
+.dag-svg-container {
+	flex: 1;
+	overflow: auto;
+	position: relative;
+	cursor: grab;
+}
+
+.dag-svg-container:active {
+	cursor: grabbing;
+}
+
+.dag-graph-svg {
+	display: block;
+	min-width: 100%;
+	min-height: 100%;
+}
+
+/* Grid background pattern */
+.dag-grid-pattern {
+	fill: none;
+}
+
+/* Edges */
+.dag-edge {
+	stroke-linecap: round;
+	transition: stroke 0.2s, stroke-width 0.2s;
+}
+
+.dag-edge-arrow {
+	transition: fill 0.2s;
+}
+
+/* Node group */
+.dag-node-group {
+	cursor: pointer;
+	transition: opacity 0.2s;
+}
+
+.dag-node-group:hover .dag-node-rect {
+	filter: brightness(1.15);
+}
+
+/* Node rectangle */
+.dag-node-rect {
+	transition: stroke 0.2s, stroke-width 0.2s, fill 0.2s;
+}
+
+/* Node label */
+.dag-node-label {
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+	pointer-events: none;
+	user-select: none;
+}
+
+/* Node sublabel (file path) */
+.dag-node-sublabel {
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+	pointer-events: none;
+	user-select: none;
+}
+
+/* Status indicator */
+.dag-node-status {
+	transition: fill 0.2s;
+}
+
+/* Node type icon */
+.dag-node-type-icon {
+	pointer-events: none;
+}
+
+/* =========================================================================
+ * 5. Detail panel (right sidebar)
+ * ========================================================================= */
+
+.dag-detail-panel {
+	width: 280px;
+	flex-shrink: 0;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-left: 1px solid var(--soa-border-default, #2A2A2A);
+	overflow-y: auto;
+	padding: 0;
+	font-family: var(--soa-font-ui, 'Geist', 'Segoe UI', sans-serif);
+}
+
+.dag-detail-header-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--soa-border-default, #2A2A2A);
+	background: var(--soa-bg-secondary, #111111);
+}
+
+.dag-detail-header {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--soa-text-primary, #E8E8E8);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+}
+
+.dag-detail-close {
+	width: 28px;
+	height: 28px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--soa-text-muted, #555555);
+	font-size: 16px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.15s, color 0.15s;
+	flex-shrink: 0;
+}
+
+.dag-detail-close:hover {
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+.dag-detail-section {
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--soa-border-default, #2A2A2A);
+}
+
+.dag-detail-section-title {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--soa-text-muted, #555555);
+	margin-bottom: 8px;
+}
+
+.dag-detail-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 0;
+	font-size: 12px;
+}
+
+.dag-detail-label {
+	color: var(--soa-text-secondary, #888888);
+}
+
+.dag-detail-value {
+	color: var(--soa-text-primary, #E8E8E8);
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+	font-size: 11px;
+	text-align: right;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 160px;
+}
+
+.dag-detail-status-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 500;
+	background: var(--soa-bg-elevated, #161616);
+}
+
+.dag-detail-status-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+}
+
+.dag-detail-dep-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.dag-detail-dep-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	color: var(--soa-text-secondary, #888888);
+	cursor: pointer;
+	transition: background 0.1s;
+}
+
+.dag-detail-dep-item:hover {
+	background: var(--soa-bg-elevated, #161616);
+	color: var(--soa-text-primary, #E8E8E8);
+}
+
+.dag-detail-dep-arrow {
+	color: var(--soa-text-muted, #555555);
+	font-size: 10px;
+}
+
+/* Detail metadata grid */
+.dag-detail-meta-grid {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 4px 12px;
+	font-size: 12px;
+}
+
+.dag-detail-meta-key {
+	color: var(--soa-text-muted, #555555);
+	white-space: nowrap;
+}
+
+.dag-detail-meta-value {
+	color: var(--soa-text-secondary, #888888);
+	font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+	font-size: 11px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* =========================================================================
+ * 6. Scrollbar styling
+ * ========================================================================= */
+
+.dag-svg-container::-webkit-scrollbar,
+.dag-detail-panel::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.dag-svg-container::-webkit-scrollbar-track,
+.dag-detail-panel::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.dag-svg-container::-webkit-scrollbar-thumb,
+.dag-detail-panel::-webkit-scrollbar-thumb {
+	background: var(--soa-border-default, #2A2A2A);
+	border-radius: 4px;
+}
+
+.dag-svg-container::-webkit-scrollbar-thumb:hover,
+.dag-detail-panel::-webkit-scrollbar-thumb:hover {
+	background: var(--soa-text-muted, #555555);
+}
+
+/* =========================================================================
+ * 7. Legend
+ * ========================================================================= */
+
+.dag-legend {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 6px 16px;
+	background: var(--soa-bg-primary, #0D0D0D);
+	border-top: 1px solid var(--soa-border-default, #2A2A2A);
+	flex-shrink: 0;
+	font-size: 11px;
+	color: var(--soa-text-muted, #555555);
+}
+
+.dag-legend-item {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.dag-legend-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 3px;
+}
+
+.dag-legend-line {
+	width: 16px;
+	height: 2px;
+	border-radius: 1px;
+}

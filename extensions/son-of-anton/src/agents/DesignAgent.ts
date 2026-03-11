@@ -102,7 +102,7 @@ export class DesignAgent extends BaseAgent {
 				'Reference actual file paths and function names from the codebase.',
 			];
 
-			const { text, tokenUsage } = await this.callLlm(
+			const { text } = await this.callLlm(
 				task.id,
 				'opus',
 				systemPrompt,

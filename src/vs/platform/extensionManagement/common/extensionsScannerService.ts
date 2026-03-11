@@ -204,7 +204,9 @@ export abstract class AbstractExtensionsScannerService extends Disposable implem
 		promises.push(this.scanDefaultSystemExtensions(scanOptions.language));
 		promises.push(this.scanDevSystemExtensions(scanOptions.language, !!scanOptions.checkControlFile));
 		const [defaultSystemExtensions, devSystemExtensions] = await Promise.all(promises);
-		return this.applyScanOptions([...defaultSystemExtensions, ...devSystemExtensions], ExtensionType.System, { pickLatest: false });
+		const combined = [...defaultSystemExtensions, ...devSystemExtensions];
+		const result = await this.applyScanOptions(combined, ExtensionType.System, { pickLatest: false });
+		return result;
 	}
 
 	async scanUserExtensions(scanOptions: UserExtensionsScanOptions): Promise<IScannedExtension[]> {
@@ -664,9 +666,6 @@ class ExtensionsScanner extends Disposable {
 					engines: { vscode: '' }
 				};
 			} else {
-				if (input.type !== ExtensionType.System) {
-					this.logService.error(e);
-				}
 				return null;
 			}
 		}

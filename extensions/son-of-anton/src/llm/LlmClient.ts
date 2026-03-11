@@ -3,215 +3,199 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
+import { ModelId, LlmMessage, LlmRequestOptions, LlmStreamEvent, LlmStreamToken, LlmStreamComplete, LlmStreamError, LlmProvider, ProviderType, getAnthropicModelId } from './types';
+import { AnthropicProvider } from './providers/AnthropicProvider';
+import { ClaudeCliProvider } from './providers/ClaudeCliProvider';
+import { CodexCliProvider } from './providers/CodexCliProvider';
+import { CopilotProvider } from './providers/CopilotProvider';
+import { GeminiCliProvider } from './providers/GeminiCliProvider';
+import { GitHubCopilotProvider } from './providers/GitHubCopilotProvider';
+import { MockProvider } from './providers/MockProvider';
+import { ModelRouterProvider } from './providers/ModelRouterProvider';
+import { OllamaProvider } from './providers/OllamaProvider';
+import { OpenAiProvider } from './providers/OpenAiProvider';
 
-export type ModelId = 'opus' | 'sonnet' | 'haiku';
-
-export interface LlmMessage {
-	role: 'user' | 'assistant';
-	content: string;
-}
-
-export interface LlmRequestOptions {
-	model: ModelId;
-	messages: LlmMessage[];
-	maxTokens?: number;
-	systemPrompt?: string;
-	signal?: AbortSignal;
-	/** Enable prompt caching for the system prompt. */
-	enableCaching?: boolean;
-	/** Agent handle for cache metrics tracking. */
-	agentHandle?: string;
-}
-
-export interface LlmStreamToken {
-	type: 'token';
-	token: string;
-}
-
-export interface LlmStreamComplete {
-	type: 'complete';
-	fullText: string;
-	inputTokens: number;
-	outputTokens: number;
-	cachedTokens: number;
-	cacheCreationTokens: number;
-	cacheReadTokens: number;
-}
-
-export interface LlmStreamError {
-	type: 'error';
-	error: string;
-}
-
-export type LlmStreamEvent = LlmStreamToken | LlmStreamComplete | LlmStreamError;
+// Re-export types for backward compatibility
+export { ModelId, LlmMessage, LlmRequestOptions, LlmStreamEvent, LlmStreamToken, LlmStreamComplete, LlmStreamError };
 
 /**
- * Routes requests to Claude models based on task complexity.
- * In Phase 1, this is a stub that will be connected to the Anthropic API.
+ * Routes requests to LLM providers based on configuration.
+ *
+ * Auto-mode priority:
+ * 1. copilot        — VS Code LM API (Claude Code, GitHub Copilot, Codex extensions)
+ * 2. github-copilot — Direct GitHub Copilot Chat API (uses GitHub auth session)
+ * 3. anthropic      — Direct Anthropic API (requires API key)
+ * 4. openai         — Direct OpenAI API (requires API key)
+ * 5. ollama         — Local Ollama instance
+ * 6. model-router   — Multi-provider routing service (Docker)
+ * 7. mock           — Demo fallback
+ *
+ * CLI providers (claude-cli, gemini-cli, codex-cli) have significant startup
+ * overhead and must be explicitly selected via `sota.provider` setting.
  */
 export class LlmClient {
 	private totalInputTokens = 0;
 	private totalOutputTokens = 0;
 	private totalCachedTokens = 0;
 
+	private readonly providers: Map<ProviderType, LlmProvider>;
+	private activeProvider: LlmProvider | undefined;
+	private providerResolved = false;
+
+	private readonly disposables: vscode.Disposable[] = [];
+
 	constructor(_context: vscode.ExtensionContext) {
-		// Context reserved for future use (e.g., secrets storage)
+		const copilotProvider = new CopilotProvider();
+
+		this.providers = new Map<ProviderType, LlmProvider>([
+			['copilot', copilotProvider],
+			['github-copilot', new GitHubCopilotProvider()],
+			['anthropic', new AnthropicProvider()],
+			['openai', new OpenAiProvider()],
+			['claude-cli', new ClaudeCliProvider()],
+			['gemini-cli', new GeminiCliProvider()],
+			['codex-cli', new CodexCliProvider()],
+			['ollama', new OllamaProvider()],
+			['model-router', new ModelRouterProvider()],
+			['mock', new MockProvider()],
+		]);
+
+		this.disposables.push(
+			vscode.workspace.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration('sota')) {
+					this.resetProvider();
+				}
+			}),
+		);
+
+		// When extension models (Claude Code, Copilot, Codex) register late,
+		// auto-switch to the copilot provider if we're in auto mode and
+		// currently using a lower-priority provider.
+		this.disposables.push(
+			copilotProvider.onDidBecomeAvailable(() => {
+				const configured = this.getConfiguredProvider();
+				if (configured === 'auto' && this.activeProvider?.name !== 'copilot') {
+					console.log(`[SoA] Extension models now available — switching from ${this.activeProvider?.name ?? 'none'} to copilot`);
+					this.activeProvider = copilotProvider;
+					this.providerResolved = true;
+				}
+			}),
+		);
+
+		this.disposables.push(copilotProvider);
+	}
+
+	dispose(): void {
+		for (const d of this.disposables) {
+			d.dispose();
+		}
 	}
 
 	/**
-	 * Get the API key from configuration or environment.
+	 * Get the configured provider type from settings.
 	 */
-	private getApiKey(): string | undefined {
+	private getConfiguredProvider(): ProviderType {
 		const config = vscode.workspace.getConfiguration('sota');
-		const configKey = config.get<string>('apiKey');
-		if (configKey) {
-			return configKey;
+		return config.get<ProviderType>('provider') ?? 'auto';
+	}
+
+	/**
+	 * Resolve the active provider. In `auto` mode, tries each provider in priority order.
+	 * Caches the result for subsequent calls (reset on config change).
+	 */
+	private async resolveProvider(): Promise<LlmProvider> {
+		if (this.providerResolved && this.activeProvider) {
+			return this.activeProvider;
 		}
-		return process.env['ANTHROPIC_API_KEY'];
+
+		const configured = this.getConfiguredProvider();
+
+		if (configured !== 'auto') {
+			const provider = this.providers.get(configured);
+			if (provider) {
+				this.activeProvider = provider;
+				this.providerResolved = true;
+				return provider;
+			}
+		}
+
+		// Auto mode priority:
+		// 1. copilot        — vscode.lm API (catches Claude Code, Copilot, Codex extensions if they register models)
+		// 2. github-copilot — Direct Copilot API via GitHub auth (works even if vscode.lm doesn't)
+		// 3. anthropic      — Direct Anthropic API (if API key is set)
+		// 4. openai         — Direct OpenAI API (if API key is set)
+		// 5. ollama         — Local Ollama instance
+		// 6. model-router   — Docker service
+		// CLI providers excluded from auto — too slow to probe on startup.
+		const order: ProviderType[] = [
+			'copilot',
+			'github-copilot',
+			'anthropic',
+			'openai',
+			'ollama',
+			'model-router',
+		];
+
+		for (const key of order) {
+			const provider = this.providers.get(key)!;
+			try {
+				console.log(`[SoA] Checking provider: ${key}...`);
+				if (await provider.isAvailable()) {
+					console.log(`[SoA] Using provider: ${key}`);
+					this.activeProvider = provider;
+					this.providerResolved = true;
+					return provider;
+				}
+				console.log(`[SoA] Provider ${key} not available`);
+			} catch {
+				console.log(`[SoA] Provider ${key} check failed`);
+			}
+		}
+
+		// Fall back to mock
+		console.log('[SoA] No providers available, falling back to mock');
+		const mock = this.providers.get('mock')!;
+		this.activeProvider = mock;
+		this.providerResolved = true;
+		return mock;
+	}
+
+	/**
+	 * Reset provider resolution (e.g. after config change).
+	 */
+	resetProvider(): void {
+		this.activeProvider = undefined;
+		this.providerResolved = false;
+	}
+
+	/**
+	 * Get the name of the currently active provider.
+	 */
+	async getActiveProviderName(): Promise<string> {
+		const provider = await this.resolveProvider();
+		return provider.name;
 	}
 
 	/**
 	 * Map our model shorthand to the full model ID.
 	 */
 	getModelId(model: ModelId): string {
-		switch (model) {
-			case 'opus': return 'claude-3-opus-20240229';
-			case 'sonnet': return 'claude-3-sonnet-20240229';
-			case 'haiku': return 'claude-3-haiku-20240307';
-		}
-
+		return getAnthropicModelId(model);
 	}
 
 	/**
-	 * Stream a request to the LLM. Returns an async iterable of stream events.
-	 * In Phase 1, this returns a simulated response. Replace with actual API calls.
+	 * Stream a request to the LLM via the active provider.
 	 */
 	async *streamRequest(options: LlmRequestOptions): AsyncGenerator<LlmStreamEvent> {
-		const apiKey = this.getApiKey();
+		const provider = await this.resolveProvider();
 
-		if (!apiKey) {
-			yield {
-				type: 'error',
-				error: 'No API key configured. Set sota.apiKey in settings or ANTHROPIC_API_KEY environment variable.'
-			};
-			return;
-		}
-
-		const modelId = this.getModelId(options.model);
-
-		// Build system prompt with cache control for prompt caching
-		const systemContent = options.enableCaching
-			? [{ type: 'text', text: options.systemPrompt ?? 'You are a helpful coding assistant.', cache_control: { type: 'ephemeral' } }]
-			: options.systemPrompt ?? 'You are a helpful coding assistant.';
-
-		const body = {
-			model: modelId,
-			max_tokens: options.maxTokens ?? 4096,
-			system: systemContent,
-			messages: options.messages.map(m => ({
-				role: m.role,
-				content: m.content,
-			})),
-			stream: true,
-		};
-
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
-			'x-api-key': apiKey,
-			'anthropic-version': '2023-06-01',
-		};
-
-		// Enable prompt caching beta header
-		if (options.enableCaching) {
-			headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
-		}
-
-		try {
-			const response = await fetch('https://api.anthropic.com/v1/messages', {
-				method: 'POST',
-				headers,
-				body: JSON.stringify(body),
-				signal: options.signal,
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				yield { type: 'error', error: `API error ${response.status}: ${errorText}` };
-				return;
+		for await (const event of provider.streamRequest(options)) {
+			if (event.type === 'complete') {
+				this.totalInputTokens += event.inputTokens;
+				this.totalOutputTokens += event.outputTokens;
+				this.totalCachedTokens += event.cachedTokens;
 			}
-
-			const reader = response.body?.getReader();
-			if (!reader) {
-				yield { type: 'error', error: 'No response body' };
-				return;
-			}
-
-			const decoder = new TextDecoder();
-			let fullText = '';
-			let inputTokens = 0;
-			let outputTokens = 0;
-			let cacheCreationTokens = 0;
-			let cacheReadTokens = 0;
-			let buffer = '';
-
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) {
-					break;
-				}
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split('\n');
-				buffer = lines.pop() ?? '';
-
-				for (const line of lines) {
-					if (!line.startsWith('data: ')) {
-						continue;
-					}
-					const data = line.slice(6).trim();
-					if (data === '[DONE]') {
-						continue;
-					}
-
-					try {
-						const event = JSON.parse(data);
-
-						if (event.type === 'content_block_delta' && event.delta?.text) {
-							const token = event.delta.text;
-							fullText += token;
-							yield { type: 'token', token };
-						} else if (event.type === 'message_start' && event.message?.usage) {
-							inputTokens = event.message.usage.input_tokens ?? 0;
-							cacheCreationTokens = event.message.usage.cache_creation_input_tokens ?? 0;
-							cacheReadTokens = event.message.usage.cache_read_input_tokens ?? 0;
-						} else if (event.type === 'message_delta' && event.usage) {
-							outputTokens = event.usage.output_tokens ?? 0;
-						}
-					} catch {
-						// Skip malformed JSON lines in the stream
-					}
-				}
-			}
-
-			this.totalInputTokens += inputTokens;
-			this.totalOutputTokens += outputTokens;
-			this.totalCachedTokens += cacheReadTokens;
-
-			yield {
-				type: 'complete',
-				fullText,
-				inputTokens,
-				outputTokens,
-				cachedTokens: cacheReadTokens,
-				cacheCreationTokens,
-				cacheReadTokens,
-			};
-		} catch (err) {
-			if (options.signal?.aborted) {
-				yield { type: 'error', error: 'Request cancelled' };
-			} else {
-				yield { type: 'error', error: `Request failed: ${err}` };
-			}
+			yield event;
 		}
 	}
 

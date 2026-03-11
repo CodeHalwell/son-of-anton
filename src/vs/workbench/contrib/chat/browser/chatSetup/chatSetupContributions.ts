@@ -568,6 +568,15 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			}
 		}
 
+		// Check for built-in extensions that ship with the product (e.g. son-of-anton)
+		// These are loaded from the extensions/ directory and don't need marketplace installation.
+		await this.extensionService.whenInstalledExtensionsRegistered();
+		const builtInExtension = this.extensionService.extensions.find(ext => ExtensionIdentifier.equals(ext.identifier, defaultChat.chatExtensionId));
+		if (builtInExtension) {
+			context.update({ installed: true, disabled: false, untrusted: false });
+			return;
+		}
+
 		// Await extensions to be ready to be queried
 		await this.extensionsWorkbenchService.queryLocal();
 

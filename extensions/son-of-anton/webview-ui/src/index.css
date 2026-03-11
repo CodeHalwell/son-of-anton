@@ -1,0 +1,531 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Son of Anton Contributors. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Son of Anton Chat — uses VS Code CSS variables for theme integration */
+
+:root {
+	--sota-amber: #F5A623;
+	--sota-amber-dim: #F5A62366;
+	--sota-amber-glow: #F5A62320;
+	--sota-bg: var(--vscode-editor-background, #0D0D0D);
+	--sota-fg: var(--vscode-editor-foreground, #E0E0E0);
+	--sota-fg-dim: var(--vscode-descriptionForeground, #999999);
+	--sota-border: var(--vscode-panel-border, #333333);
+	--sota-input-bg: var(--vscode-input-background, #1A1A1A);
+	--sota-input-border: var(--vscode-input-border, #444444);
+	--sota-button-bg: var(--vscode-button-background, #F5A623);
+	--sota-button-fg: var(--vscode-button-foreground, #0D0D0D);
+	--sota-error: var(--vscode-errorForeground, #f44336);
+	--sota-success: var(--vscode-terminal-ansiGreen, #4caf50);
+	--sota-code-bg: var(--vscode-textCodeBlock-background, #1a1a2e);
+}
+
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: var(--vscode-font-family, 'Geist', system-ui, sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+	color: var(--sota-fg);
+	background: var(--sota-bg);
+	height: 100vh;
+	overflow: hidden;
+}
+
+#root {
+	height: 100%;
+}
+
+/* =========================================================================
+   Chat View Layout
+   ========================================================================= */
+
+.chat-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+/* Header */
+.chat-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--sota-border);
+	flex-shrink: 0;
+}
+
+.chat-title {
+	font-weight: 600;
+	color: var(--sota-amber);
+}
+
+.chat-header-spacer {
+	flex: 1;
+}
+
+.chat-clear {
+	background: transparent;
+	border: 1px solid var(--sota-border);
+	color: var(--sota-fg);
+	padding: 2px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+
+.chat-clear:hover {
+	opacity: 1;
+	border-color: var(--sota-amber-dim);
+}
+
+/* =========================================================================
+   Model Selector
+   ========================================================================= */
+
+.model-selector {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: transparent;
+	border: 1px solid var(--sota-border);
+	color: var(--sota-fg);
+	padding: 2px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+}
+
+.model-selector:hover {
+	border-color: var(--sota-amber-dim);
+}
+
+.model-selector-name {
+	font-weight: 600;
+	color: var(--sota-amber);
+}
+
+.model-selector-provider {
+	opacity: 0.5;
+	font-size: 0.9em;
+}
+
+/* =========================================================================
+   Message List
+   ========================================================================= */
+
+.chat-messages {
+	flex: 1;
+	overflow-y: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+/* Empty state */
+.chat-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	text-align: center;
+	gap: 8px;
+}
+
+.chat-empty-icon {
+	font-size: 2em;
+	opacity: 0.4;
+}
+
+.chat-empty-title {
+	font-size: 1.1em;
+	font-weight: 600;
+	opacity: 0.6;
+}
+
+.chat-empty-hint {
+	font-size: 0.9em;
+	opacity: 0.4;
+	max-width: 300px;
+	line-height: 1.5;
+}
+
+/* =========================================================================
+   Chat Row
+   ========================================================================= */
+
+.chat-row {
+	max-width: 100%;
+}
+
+.chat-row--user {
+	background: var(--sota-input-bg);
+	border: 1px solid var(--sota-border);
+	border-radius: 8px;
+	padding: 8px 12px;
+	align-self: flex-end;
+	max-width: 85%;
+}
+
+.chat-row--user .chat-row-content {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.chat-row--assistant {
+	align-self: flex-start;
+}
+
+.chat-row-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+.chat-row-agent {
+	font-size: 0.8em;
+	font-weight: 600;
+	color: var(--sota-amber);
+	opacity: 0.8;
+}
+
+.chat-row-model {
+	font-size: 0.75em;
+	opacity: 0.5;
+}
+
+.chat-row-content {
+	line-height: 1.6;
+}
+
+.chat-row-error {
+	color: var(--sota-error);
+	font-style: italic;
+	font-size: 0.9em;
+}
+
+.chat-row-meta {
+	font-size: 0.75em;
+	color: var(--sota-fg-dim);
+	margin-top: 6px;
+	opacity: 0.6;
+}
+
+/* =========================================================================
+   Streaming Markdown
+   ========================================================================= */
+
+.markdown p {
+	margin-bottom: 8px;
+}
+
+.markdown p:last-child {
+	margin-bottom: 0;
+}
+
+.markdown h1, .markdown h2, .markdown h3,
+.markdown h4, .markdown h5, .markdown h6 {
+	margin: 12px 0 6px;
+	color: var(--sota-amber);
+}
+
+.markdown h1 { font-size: 1.4em; }
+.markdown h2 { font-size: 1.2em; }
+.markdown h3 { font-size: 1.1em; }
+
+.markdown ul, .markdown ol {
+	padding-left: 20px;
+	margin: 6px 0;
+}
+
+.markdown li {
+	margin: 2px 0;
+}
+
+.markdown strong {
+	font-weight: 600;
+}
+
+.markdown a {
+	color: var(--sota-amber);
+	text-decoration: none;
+}
+
+.markdown a:hover {
+	text-decoration: underline;
+}
+
+.inline-code {
+	background: var(--sota-code-bg);
+	padding: 1px 4px;
+	border-radius: 3px;
+	font-family: var(--vscode-editor-font-family, 'Fira Code', monospace);
+	font-size: 0.9em;
+}
+
+.code-block {
+	background: var(--sota-code-bg);
+	border: 1px solid var(--sota-border);
+	border-radius: 6px;
+	padding: 10px 12px;
+	margin: 8px 0;
+	overflow-x: auto;
+	font-family: var(--vscode-editor-font-family, 'Fira Code', monospace);
+	font-size: 0.9em;
+	line-height: 1.5;
+	white-space: pre;
+}
+
+.code-block--partial {
+	border-style: dashed;
+	opacity: 0.8;
+}
+
+.markdown-streaming {
+	display: inline;
+}
+
+.cursor-blink {
+	animation: blink 0.8s infinite;
+	color: var(--sota-amber);
+	font-weight: 300;
+}
+
+@keyframes blink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0; }
+}
+
+/* =========================================================================
+   Tool Call Cards
+   ========================================================================= */
+
+.tool-call-card {
+	border: 1px solid var(--sota-border);
+	border-radius: 6px;
+	margin: 6px 0;
+	font-size: 0.9em;
+	overflow: hidden;
+}
+
+.tool-call-card--running {
+	border-color: var(--sota-amber-dim);
+}
+
+.tool-call-card--completed {
+	border-color: var(--sota-success);
+}
+
+.tool-call-card--error {
+	border-color: var(--sota-error);
+}
+
+.tool-call-card--denied {
+	border-color: var(--sota-fg-dim);
+	opacity: 0.6;
+}
+
+.tool-call-card--pending {
+	border-color: var(--sota-amber);
+	background: var(--sota-amber-glow);
+}
+
+.tool-call-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.tool-call-header:hover {
+	background: var(--sota-amber-glow);
+}
+
+.tool-call-icon {
+	font-size: 0.9em;
+	width: 16px;
+	text-align: center;
+}
+
+.tool-call-name {
+	font-weight: 600;
+	flex: 1;
+}
+
+.tool-call-latency {
+	font-size: 0.8em;
+	opacity: 0.5;
+}
+
+.tool-call-chevron {
+	font-size: 0.8em;
+	opacity: 0.5;
+}
+
+.tool-call-body {
+	padding: 0 10px 8px;
+	border-top: 1px solid var(--sota-border);
+}
+
+.tool-call-section {
+	margin-top: 6px;
+}
+
+.tool-call-label {
+	font-size: 0.8em;
+	font-weight: 600;
+	opacity: 0.6;
+	margin-bottom: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.tool-call-args,
+.tool-call-result {
+	background: var(--sota-code-bg);
+	border-radius: 4px;
+	padding: 6px 8px;
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 0.85em;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.tool-call-result--error {
+	color: var(--sota-error);
+}
+
+.tool-call-actions {
+	display: flex;
+	gap: 8px;
+	padding: 6px 10px;
+	border-top: 1px solid var(--sota-border);
+}
+
+.tool-call-approve {
+	background: var(--sota-success);
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 4px 12px;
+	cursor: pointer;
+	font-size: 0.85em;
+	font-weight: 600;
+}
+
+.tool-call-deny {
+	background: transparent;
+	color: var(--sota-error);
+	border: 1px solid var(--sota-error);
+	border-radius: 4px;
+	padding: 4px 12px;
+	cursor: pointer;
+	font-size: 0.85em;
+}
+
+/* =========================================================================
+   Input Area
+   ========================================================================= */
+
+.input-area {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	padding: 8px 12px;
+	border-top: 1px solid var(--sota-border);
+	flex-shrink: 0;
+}
+
+.input-textarea {
+	flex: 1;
+	background: var(--sota-input-bg);
+	border: 1px solid var(--sota-input-border);
+	border-radius: 6px;
+	color: var(--sota-fg);
+	padding: 8px 12px;
+	font-family: inherit;
+	font-size: inherit;
+	resize: none;
+	min-height: 36px;
+	max-height: 200px;
+	outline: none;
+	line-height: 1.5;
+}
+
+.input-textarea:focus {
+	border-color: var(--sota-amber);
+}
+
+.input-textarea:disabled {
+	opacity: 0.5;
+}
+
+.input-actions {
+	display: flex;
+	gap: 4px;
+}
+
+.input-button {
+	border: none;
+	border-radius: 6px;
+	padding: 8px 16px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	font-size: inherit;
+}
+
+.input-button--send {
+	background: var(--sota-button-bg);
+	color: var(--sota-button-fg);
+}
+
+.input-button--send:hover {
+	opacity: 0.9;
+}
+
+.input-button--cancel {
+	background: transparent;
+	border: 1px solid var(--sota-error);
+	color: var(--sota-error);
+}
+
+.input-button--cancel:hover {
+	background: var(--sota-error);
+	color: #fff;
+}
+
+/* =========================================================================
+   Scrollbar
+   ========================================================================= */
+
+.chat-messages::-webkit-scrollbar {
+	width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+	background: var(--sota-border);
+	border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+	background: var(--sota-amber-dim);
+}

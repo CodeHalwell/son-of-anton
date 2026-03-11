@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 /**
  * Displays a random startup message in the status bar when Son of Anton activates.

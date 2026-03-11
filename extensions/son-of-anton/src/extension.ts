@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
-import { ChatPanel } from './chat/ChatPanel';
+import { ChatService } from './chat/ChatService';
+import { ChatWebviewProvider } from './chat/ChatWebviewProvider';
 import { InlineEditProvider } from './inline/InlineEdit';
 import { CompletionProvider } from './inline/CompletionProvider';
 import { AgentStatusProvider } from './sidebar/AgentStatusProvider';
@@ -28,10 +29,17 @@ import { StartupMessages } from './personality/StartupMessages';
 import { TerminalBanner } from './personality/TerminalBanner';
 import { KonamiCode } from './personality/KonamiCode';
 import { GitBlameEasterEgg } from './personality/GitBlameEasterEgg';
+import { AgUiEventEmitter, AgUiAgentRunner } from './agui/AgUiEventEmitter';
+import { AgUiRunStore } from './agui/AgUiRunStore';
+import { AgentViewProvider } from './agui/AgentViewProvider';
+import { AgentRunInfo } from './agui/types';
 
 export function activate(context: vscode.ExtensionContext): void {
+	console.log('[SoA] ========== Son of Anton extension activating ==========');
 	const llmClient = new LlmClient(context);
 	const mcpClient = new McpClient();
+	// Connect to MCP gateway (non-blocking — logs warning if unavailable)
+	mcpClient.connect();
 	const agentManager = new AgentManager(llmClient);
 	const agentStatusProvider = new AgentStatusProvider(agentManager);
 	const taskQueueProvider = new TaskQueueProvider(agentManager);
@@ -103,23 +111,40 @@ export function activate(context: vscode.ExtensionContext): void {
 		})
 	);
 
-	// Register multi-agent chat participants
-	const agentDisposables = registerAgentParticipants(
-		context, llmClient, mcpClient, agentManager,
-	);
-	context.subscriptions.push(...agentDisposables);
+	// Register multi-agent chat participants (requires vscode.chat API — may not be available in Code OSS)
+	try {
+		const agentDisposables = registerAgentParticipants(
+			context, llmClient, mcpClient, agentManager,
+		);
+		context.subscriptions.push(...agentDisposables);
+	} catch (err) {
+		console.warn('[SoA] Chat Participants API not available — skipping agent registration:', err);
+	}
 
-	// Chat Panel
+	// --- Unified Chat Service ---
+	console.log('[SoA] Registering ChatWebviewProvider for view type:', ChatWebviewProvider.viewType);
+	const chatService = new ChatService(llmClient, mcpClient);
+	const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, chatService);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			ChatWebviewProvider.viewType,
+			chatWebviewProvider,
+			{ webviewOptions: { retainContextWhenHidden: true } },
+		),
+	);
+	console.log('[SoA] ChatWebviewProvider registered successfully');
+
+	// Open / focus the chat panel
 	context.subscriptions.push(
 		vscode.commands.registerCommand('sota.openChat', () => {
-			ChatPanel.createOrShow(context, llmClient);
+			vscode.commands.executeCommand('sota.chat.focus');
 		})
 	);
 
 	// Clear Chat
 	context.subscriptions.push(
 		vscode.commands.registerCommand('sota.clearChat', () => {
-			ChatPanel.clearConversation(context);
+			chatService.handleWebviewMessage({ type: 'clearSession' });
 		})
 	);
 
@@ -201,7 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// Background task notification handler
 	context.subscriptions.push(
-		backgroundClient.onDidCompleteTask(task => {
+		backgroundClient.onDidCompleteTask(_task => {
 			agentStatusProvider.refresh();
 		})
 	);
@@ -302,6 +327,124 @@ export function activate(context: vscode.ExtensionContext): void {
 	const gitBlameEasterEgg = new GitBlameEasterEgg();
 	context.subscriptions.push(gitBlameEasterEgg);
 
+	// --- AG-UI Agent Infrastructure ---
+	const agUiEmitter = new AgUiEventEmitter();
+	const agUiRunner = new AgUiAgentRunner(llmClient);
+	const agUiRunStore = new AgUiRunStore();
+
+	// Wire the run store's submit handler to the agent runner
+	agUiRunStore.setSubmitRunHandler(async (input) => {
+		const runId = crypto.randomUUID();
+		const threadId = input.threadId ?? crypto.randomUUID();
+		const agentName = input.agentName ?? 'Anton';
+		const model = input.model ?? 'sonnet';
+
+		// Create the run entry
+		const runInfo: AgentRunInfo = {
+			runId,
+			threadId,
+			agentName,
+			model,
+			status: 'pending',
+			startedAt: Date.now(),
+			inputTokens: 0,
+			outputTokens: 0,
+			costUsd: 0,
+			events: [],
+		};
+		agUiRunStore.addRun(runInfo);
+
+		// Run the agent asynchronously and pipe events to the store
+		(async () => {
+			try {
+				for await (const event of agUiRunner.runAgent(input)) {
+					agUiEmitter.emit(event);
+					agUiRunStore.appendEvent(runId, event);
+				}
+			} catch (err) {
+				agUiRunStore.updateRun(runId, {
+					status: 'error',
+					finishedAt: Date.now(),
+				});
+				const message = err instanceof Error ? err.message : String(err);
+				console.error(`[SoA] Agent run ${runId} failed: ${message}`);
+			}
+		})();
+
+		return runId;
+	});
+
+	agUiRunStore.setCancelRunHandler((runId) => {
+		agUiEmitter.cancelRun(runId);
+		agUiRunner.cancelRun(runId);
+		agUiRunStore.updateRun(runId, {
+			status: 'cancelled',
+			finishedAt: Date.now(),
+		});
+	});
+
+	// Agent View sidebar
+	const agentViewProvider = new AgentViewProvider(agUiRunStore);
+	context.subscriptions.push(
+		vscode.window.registerTreeDataProvider('sota.agentRuns', agentViewProvider),
+	);
+
+	// Bridge AG-UI events into the unified chat panel
+	context.subscriptions.push(
+		agUiEmitter.onEvent(event => {
+			chatService.injectAgUiEvent(event);
+		}),
+	);
+
+	// Agent Chat panel command — now opens the unified chat panel
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sota.openAgentChat', () => {
+			vscode.commands.executeCommand('sota.chat.focus');
+		}),
+	);
+
+	// Open agent stream for a specific run (from sidebar click)
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sota.openAgentStream', (_runId: string) => {
+			// Focus the unified chat panel (run-specific views will come later)
+			vscode.commands.executeCommand('sota.chat.focus');
+		}),
+	);
+
+	// New agent run command — route through unified chat
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sota.newAgentRun', async () => {
+			const prompt = await vscode.window.showInputBox({
+				prompt: 'What should Anton do?',
+				placeHolder: 'e.g., Review the code in src/main.ts',
+			});
+			if (!prompt) {
+				return;
+			}
+
+			// Send through unified chat service
+			await chatService.sendMessage(prompt);
+			vscode.commands.executeCommand('sota.chat.focus');
+		}),
+	);
+
+	// Cancel agent run command
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sota.cancelAgentRun', (runId?: string) => {
+			const id = runId ?? agUiRunStore.getActiveRunId();
+			if (id) {
+				agUiRunStore.cancelRun(id);
+			}
+		}),
+	);
+
+	// Refresh agent view command
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sota.refreshAgentView', () => {
+			agentViewProvider.refresh();
+		}),
+	);
+
 	// Dispose sandbox, security, spec sync, and background client on deactivation
 	context.subscriptions.push({
 		dispose: () => {
@@ -312,6 +455,11 @@ export function activate(context: vscode.ExtensionContext): void {
 			sandboxTerminal.dispose();
 			specSyncWatcher.dispose();
 			backgroundClient.dispose();
+			mcpClient.dispose();
+			chatService.dispose();
+			agUiEmitter.dispose();
+			agUiRunStore.dispose();
+			agentViewProvider.dispose();
 		}
 	});
 }

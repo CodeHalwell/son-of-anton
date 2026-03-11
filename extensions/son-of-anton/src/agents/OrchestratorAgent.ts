@@ -6,12 +6,9 @@
 import * as vscode from 'vscode';
 import { BaseAgent, AgentContext } from './BaseAgent';
 import { ReviewAgent } from './ReviewAgent';
-import { MetricsTracker } from './MetricsTracker';
-import { ProjectMemory } from './ProjectMemory';
 import {
 	AgentHandle,
 	ExecutionPlan,
-	ScopeDeclaration,
 	ScopeEntry,
 	Subtask,
 	SubtaskResult,
@@ -82,9 +79,9 @@ export class OrchestratorAgent extends BaseAgent {
 	 * Handle a direct chat request from @anton.
 	 * This is the main entry point for the orchestrator.
 	 */
-	async handleChatRequest(
+	override async handleChatRequest(
 		request: vscode.ChatRequest,
-		chatContext: vscode.ChatContext,
+		_chatContext: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
 	): Promise<void> {
@@ -121,7 +118,7 @@ export class OrchestratorAgent extends BaseAgent {
 		request: vscode.ChatRequest,
 		stream: vscode.ChatResponseStream,
 		taskId: string,
-		token: vscode.CancellationToken,
+		_token: vscode.CancellationToken,
 	): Promise<void> {
 		stream.markdown('**Analyzing request and querying code graph...**\n\n');
 
@@ -524,7 +521,7 @@ export class OrchestratorAgent extends BaseAgent {
 	/**
 	 * Not used directly — orchestrator overrides handleChatRequest.
 	 */
-	async execute(context: AgentContext): Promise<SubtaskResult> {
+	async execute(_context: AgentContext): Promise<SubtaskResult> {
 		return {
 			success: true,
 			changes: [],

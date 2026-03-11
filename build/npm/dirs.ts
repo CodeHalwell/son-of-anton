@@ -37,6 +37,7 @@ export const dirs = [
 	'extensions/media-preview',
 	'extensions/merge-conflict',
 	'extensions/mermaid-chat-features',
+	'extensions/son-of-anton',
 	'extensions/notebook-renderers',
 	'extensions/npm',
 	'extensions/php-language-features',

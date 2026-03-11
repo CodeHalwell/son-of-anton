@@ -145,8 +145,6 @@ export class CostReporter {
 		const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 		const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-		const weekMs = 7 * 24 * 60 * 60 * 1000;
-
 		// Current week entries
 		const currentWeekEntries = this.entries.filter(
 			e => e.timestamp >= weekAgo.getTime()

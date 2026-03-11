@@ -113,7 +113,7 @@ export class TaskDecompositionAgent extends BaseAgent {
 				'Each task must map to a specific agent and file scope.',
 			];
 
-			const { text, tokenUsage } = await this.callLlm(
+			const { text } = await this.callLlm(
 				task.id,
 				'sonnet',
 				systemPrompt,

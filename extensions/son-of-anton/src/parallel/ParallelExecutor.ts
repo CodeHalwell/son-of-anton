@@ -12,7 +12,7 @@
  * to work concurrently on non-overlapping file sets.
  */
 
-import { ScopeLockManager, LockConflict } from './ScopeLockManager';
+import { ScopeLockManager } from './ScopeLockManager';
 import { WorktreeManager, MergeResult } from './WorktreeManager';
 
 export interface ParallelTask {

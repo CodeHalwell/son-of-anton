@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { SandboxManager, SandboxResult } from '../sandbox/SandboxManager';
+import { SandboxManager } from '../sandbox/SandboxManager';
 
 /**
  * SARIF result as parsed from Semgrep/Trivy output.
@@ -134,7 +134,8 @@ export class SecurityScanner {
 	 * Returns the parsed SARIF report.
 	 */
 	async runSemgrep(filePaths: string[]): Promise<SarifReport> {
-        const targets = filePaths.map(f => "'/workspace/${f}'").join(' ');
+		const targets = filePaths.map(f => `'/workspace/${f}'`).join(' ');
+		const command = `semgrep --sarif --config=auto ${targets}`;
 
 		const result = await this.sandbox.execute(command);
 		const report = parseSarif(result.stdout, 'Semgrep');

@@ -70,8 +70,6 @@ export interface ScalingBlocker {
 const MAX_CONFLICT_RATE = 0.05; // 5%
 const MAX_LOCK_CONTENTION_PER_RUN = 10;
 const MAX_DISK_USAGE_PER_WORKTREE_MB = 2048;
-const BENCHMARK_RUNS_PER_TEST = 3;
-
 /**
  * ScalingManager — manages scaling from 2 to 4 concurrent agents.
  *

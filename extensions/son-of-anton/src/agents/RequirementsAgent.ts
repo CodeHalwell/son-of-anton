@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import { BaseAgent, AgentContext } from './BaseAgent';
 import { SubtaskResult } from './types';
 import {
@@ -138,7 +137,7 @@ export class RequirementsAgent extends BaseAgent {
 				);
 			}
 
-			const { text, tokenUsage } = await this.callLlm(
+			const { text } = await this.callLlm(
 				task.id,
 				'opus',
 				systemPrompt,

@@ -197,6 +197,22 @@
 			{
 				"command": "sota.konami",
 				"title": "Anton: Konami Code"
+			},
+			{
+				"command": "sota.openAgentChat",
+				"title": "Son of Anton: Open Agent Chat"
+			},
+			{
+				"command": "sota.cancelAgentRun",
+				"title": "Son of Anton: Cancel Agent Run"
+			},
+			{
+				"command": "sota.refreshAgentView",
+				"title": "Son of Anton: Refresh Agent View"
+			},
+			{
+				"command": "sota.newAgentRun",
+				"title": "Son of Anton: New Agent Run"
 			}
 		],
 		"keybindings": [
@@ -205,6 +221,17 @@
 				"key": "ctrl+k",
 				"mac": "cmd+k",
 				"when": "editorTextFocus"
+			},
+			{
+				"command": "sota.openChat",
+				"key": "ctrl+shift+a",
+				"mac": "cmd+shift+a"
+			},
+			{
+				"command": "sota.newAgentRun",
+				"key": "ctrl+shift+n",
+				"mac": "cmd+shift+n",
+				"when": "focusedView == sota.agentRuns"
 			}
 		],
 		"viewsContainers": {
@@ -213,6 +240,18 @@
 					"id": "sota-sidebar",
 					"title": "Son of Anton",
 					"icon": "media/icon.svg"
+				},
+				{
+					"id": "sota-agents",
+					"title": "Agent View",
+					"icon": "$(symbol-event)"
+				}
+			],
+			"panel": [
+				{
+					"id": "sota-chat-panel",
+					"title": "Anton Chat",
+					"icon": "$(comment-discussion)"
 				}
 			]
 		},
@@ -225,6 +264,20 @@
 				{
 					"id": "sota.taskQueue",
 					"name": "Task Queue"
+				}
+			],
+			"sota-agents": [
+				{
+					"id": "sota.agentRuns",
+					"name": "Agent Runs",
+					"type": "tree"
+				}
+			],
+			"sota-chat-panel": [
+				{
+					"id": "sota.chat",
+					"name": "Chat",
+					"type": "webview"
 				}
 			]
 		},
@@ -256,20 +309,103 @@
 					"default": 50,
 					"description": "Maximum number of trace sessions to retain"
 				},
+				"sota.provider": {
+					"type": "string",
+					"default": "auto",
+					"enum": [
+						"auto",
+						"copilot",
+						"github-copilot",
+						"anthropic",
+						"openai",
+						"claude-cli",
+						"gemini-cli",
+						"codex-cli",
+						"ollama",
+						"model-router",
+						"mock"
+					],
+					"enumDescriptions": [
+						"Auto-detect: tries extension models, then GitHub Copilot API, Anthropic, OpenAI, Ollama, Model Router",
+						"VS Code Language Model API (uses models registered by Claude Code, GitHub Copilot, Codex extensions)",
+						"GitHub Copilot Chat API (uses your GitHub Copilot subscription via GitHub auth)",
+						"Direct Anthropic API (requires ANTHROPIC_API_KEY or sota.apiKey)",
+						"Direct OpenAI API (requires OPENAI_API_KEY or sota.openaiApiKey)",
+						"Claude CLI (uses existing claude CLI authentication — slow startup)",
+						"Gemini CLI (uses existing gemini CLI authentication — slow startup)",
+						"Codex CLI (uses existing codex CLI authentication — slow startup)",
+						"Local Ollama instance (free, no internet required)",
+						"Model Router service (multi-provider routing via Docker)",
+						"Mock mode (demo responses with setup instructions)"
+					],
+					"description": "LLM provider to use for AI features"
+				},
 				"sota.apiKey": {
 					"type": "string",
 					"default": "",
 					"description": "Anthropic API key (prefer environment variable ANTHROPIC_API_KEY)"
+				},
+				"sota.openaiApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "OpenAI API key (prefer environment variable OPENAI_API_KEY)"
+				},
+				"sota.ollamaModel": {
+					"type": "string",
+					"default": "",
+					"description": "Override the Ollama model name (e.g. llama3, codellama, mistral)"
+				},
+				"sota.modelRouterUrl": {
+					"type": "string",
+					"default": "http://localhost:3200",
+					"description": "URL of the model-router service"
+				},
+				"sota.mcpGatewayUrl": {
+					"type": "string",
+					"default": "http://localhost:3100",
+					"description": "URL of the MCP gateway service"
+				},
+				"sota.chat.maxHistoryLength": {
+					"type": "number",
+					"default": 100,
+					"description": "Maximum number of messages to retain in chat history"
+				},
+				"sota.chat.streamingThrottle": {
+					"type": "number",
+					"default": 16,
+					"description": "Milliseconds to batch token deltas before flushing to the webview"
+				},
+				"sota.toolApproval": {
+					"type": "object",
+					"default": {},
+					"description": "Per-tool approval policy: { \"toolName\": \"auto\" | \"manual\" | \"deny\" }"
 				}
 			}
-		}
+		},
+		"themes": [
+			{
+				"label": "Son of Anton Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/son-of-anton-dark.json"
+			}
+		]
 	},
 	"scripts": {
 		"build": "npx tsx esbuild.mts",
+		"build:webview": "node webview-ui/esbuild.mjs",
 		"watch": "npx tsx esbuild.mts --watch",
+		"watch:webview": "node webview-ui/esbuild.mjs --watch",
 		"test": "node ./out/test/runTests.js"
 	},
+	"dependencies": {
+		"better-sqlite3": "^9.4.3",
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0"
+	},
 	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.8",
+		"@types/react": "^19.0.0",
+		"@types/react-dom": "^19.0.0",
 		"@types/vscode": "^1.96.0",
 		"esbuild": "^0.24.0"
 	}

@@ -57,8 +57,6 @@ export interface SystemHealth {
 }
 
 const DEFAULT_CHECK_INTERVAL_MS = 60_000; // 1 minute
-const MAX_CONSECUTIVE_FAILURES = 3;
-
 const DEFAULT_ALERT_RULES: AlertRule[] = [
 	{
 		component: 'falkordb',

@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { LlmClient, ModelId } from '../llm/LlmClient';
-import { McpClient, McpToolCall, McpToolResult } from '../mcp/McpClient';
+import { McpClient, McpToolResult } from '../mcp/McpClient';
 import { AgentManager } from './AgentManager';
 import { MetricsTracker } from './MetricsTracker';
 import { ProjectMemory } from './ProjectMemory';
@@ -299,9 +299,9 @@ export abstract class BaseAgent {
 	 */
 	async handleChatRequest(
 		request: vscode.ChatRequest,
-		chatContext: vscode.ChatContext,
+		_chatContext: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken,
+		_token: vscode.CancellationToken,
 	): Promise<void> {
 		const task = this.agentManager.createTask(this.displayName, request.prompt);
 		this.agentManager.startTask(task.id);

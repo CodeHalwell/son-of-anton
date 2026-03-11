@@ -442,3 +442,19 @@ import '../workbench/contrib/editTelemetry/browser/editTelemetry.contribution.js
 import '../workbench/contrib/opener/browser/opener.contribution.js';
 
 //#endregion
+
+
+//#region --- Son of Anton v2 contributions (sessions-specific)
+
+// Mode Toggle — Editor ↔ Mission Control switch (⌘⇧M)
+import './contrib/modeToggle/browser/modeToggle.contribution.js';
+
+// NOTE: All other SoA v2 contributions (Mission Control, DAG Explorer, Memory,
+// Spec Renderer, Checkpoints, ACP, Terminal Blocks, Theme, Title Bar, Integration)
+// are now registered in workbench.common.main.ts so they appear in the Editor
+// window's activity bar by default.
+
+// AGUI Integration Wiring — bridges AG-UI events to all v2 surfaces
+import './contrib/integration/browser/aguiIntegrationWiring.js';
+
+//#endregion

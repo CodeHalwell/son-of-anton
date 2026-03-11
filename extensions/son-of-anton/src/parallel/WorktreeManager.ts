@@ -201,7 +201,7 @@ export class WorktreeManager {
 			}
 
 			// Merge the agent branch into the current branch in the main repo
-			const { stdout, stderr } = await exec(
+			const { stdout } = await exec(
 				`git merge "${info.branch}" --no-edit`,
 				{ cwd: this.repoRoot },
 			);

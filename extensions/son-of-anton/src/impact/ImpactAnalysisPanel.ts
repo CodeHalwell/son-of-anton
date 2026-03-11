@@ -52,15 +52,13 @@ export interface ImpactAnalysisData {
 export class ImpactAnalysisPanel {
 	private static currentPanel: ImpactAnalysisPanel | undefined;
 	private readonly panel: vscode.WebviewPanel;
-	private readonly extensionUri: vscode.Uri;
 	private disposables: vscode.Disposable[] = [];
 
 	private constructor(
 		panel: vscode.WebviewPanel,
-		extensionUri: vscode.Uri,
+		_extensionUri: vscode.Uri,
 	) {
 		this.panel = panel;
-		this.extensionUri = extensionUri;
 
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 

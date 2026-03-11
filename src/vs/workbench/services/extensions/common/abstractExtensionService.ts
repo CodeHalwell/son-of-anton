@@ -1462,10 +1462,6 @@ export function filterEnabledExtensions(logService: ILogService, extensionEnable
 	for (let index = 0; index < enablementStates.length; index++) {
 		if (extensionEnablementService.isEnabledEnablementState(enablementStates[index])) {
 			enabledExtensions.push(extensionsToCheck[index]);
-		} else {
-			if (isCI) {
-				logService.info(`filterEnabledExtensions: extension '${extensionsToCheck[index].identifier.value}' is disabled`);
-			}
 		}
 	}
 

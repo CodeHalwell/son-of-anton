@@ -69,8 +69,6 @@ export interface TemporalMemoryOptions {
 	graphName?: string;
 }
 
-const DEFAULT_GRAPH_NAME = 'son-of-anton-memory';
-
 /**
  * Temporal knowledge graph for long-term agent memory.
  * Implements the Graphiti pattern with FalkorDB as the backing store.
@@ -83,10 +81,7 @@ export class TemporalMemory {
 	private readonly topicIndex = new Map<string, Set<string>>(); // topic -> entry IDs
 	private readonly typeIndex = new Map<MemoryEntityType, Set<string>>(); // type -> entry IDs
 	private nextId = 1;
-	private readonly graphName: string;
-
-	constructor(options: TemporalMemoryOptions) {
-		this.graphName = options.graphName ?? DEFAULT_GRAPH_NAME;
+	constructor(_options: TemporalMemoryOptions) {
 	}
 
 	/**

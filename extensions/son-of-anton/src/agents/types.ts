@@ -17,7 +17,9 @@ export type AgentHandle =
 	| 'anton-pentest'
 	| 'anton-docs'
 	| 'anton-ci'
-	| 'anton-pr';
+	| 'anton-pr'
+	| 'anton-moderniser'
+	| 'anton-review';
 
 /**
  * A subtask decomposed by the orchestrator.
