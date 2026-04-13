@@ -1,7 +1,7 @@
 // Son of Anton — Graph Writer
 // Writes extracted symbols and relationships to FalkorDB.
 
-import { FalkorDBClient } from "../clients/falkordb";
+import { FalkorDBClient } from '../clients/falkordb';
 import {
 	FileExtractionResult,
 	ExtractedFunction,
@@ -9,7 +9,7 @@ import {
 	ExtractedType,
 	ExtractedImport,
 	CallSite,
-} from "../extractors/symbolExtractor";
+} from '../extractors/symbolExtractor';
 
 export class GraphWriter {
 	private readonly db: FalkorDBClient;
@@ -27,7 +27,7 @@ export class GraphWriter {
 		language: string,
 		contentHash: string,
 		lineCount: number,
-		extraction: FileExtractionResult,
+		extraction: FileExtractionResult
 	): Promise<void> {
 		// Delete existing data for this file first
 		await this.db.deleteFileData(filePath);
@@ -47,7 +47,7 @@ export class GraphWriter {
 				lastModified: Date.now(),
 				hash: contentHash,
 				lineCount,
-			},
+			}
 		);
 
 		// Write all symbols and relationships
@@ -58,10 +58,8 @@ export class GraphWriter {
 		await this.writeCallSites(extraction.callSites);
 	}
 
-	private async writeFunctions(
-		filePath: string,
-		functions: ExtractedFunction[],
-	): Promise<void> {
+	private async writeFunctions(filePath: string, functions: ExtractedFunction[]): Promise<void> {
+		const exportedFunctions: string[] = [];
 		for (const fn of functions) {
 			if (fn.isMethod) {
 				// Methods are written as part of their class
@@ -99,16 +97,12 @@ export class GraphWriter {
 					isConstructor: fn.isConstructor,
 					signature: fn.signature,
 					contentHash: fn.contentHash,
-				},
+				}
 			);
 
 			// Create EXPORTS edge if exported
 			if (fn.exported) {
-				await this.db.write(
-					`MATCH (f:File {path: $filePath}), (fn:Function {qualifiedName: $qualifiedName, file: $filePath})
-					CREATE (f)-[:EXPORTS]->(fn)`,
-					{ filePath, qualifiedName: fn.qualifiedName },
-				);
+				exportedFunctions.push(fn.qualifiedName);
 			}
 
 			// Create RETURNS edge if return type matches a known type
@@ -117,38 +111,43 @@ export class GraphWriter {
 					`MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
 						(t:Type {name: $returnType})
 					CREATE (fn)-[:RETURNS]->(t)`,
-					{
-						filePath,
-						qualifiedName: fn.qualifiedName,
-						returnType: fn.returnType,
-					},
+					{ filePath, qualifiedName: fn.qualifiedName, returnType: fn.returnType }
 				);
 			}
 
 			// Create ACCEPTS edges for parameters with known types
-			for (const param of fn.parameters) {
-				if (param.type) {
-					await this.db.write(
-						`MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
-							(t:Type {name: $paramType})
-						CREATE (fn)-[:ACCEPTS {paramName: $paramName, position: $position}]->(t)`,
-						{
-							filePath,
-							qualifiedName: fn.qualifiedName,
-							paramType: param.type,
-							paramName: param.name,
-							position: param.position,
-						},
-					);
-				}
+			const paramsWithTypes = fn.parameters.filter(p => p.type);
+			if (paramsWithTypes.length > 0) {
+				await this.db.write(
+					`UNWIND $params AS param
+					MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
+						(t:Type {name: param.paramType})
+					CREATE (fn)-[:ACCEPTS {paramName: param.paramName, position: param.position}]->(t)`,
+					{
+						filePath,
+						qualifiedName: fn.qualifiedName,
+						params: paramsWithTypes.map(p => ({
+							paramType: p.type,
+							paramName: p.name,
+							position: p.position,
+						}))
+					}
+				);
 			}
+		}
+
+		if (exportedFunctions.length > 0) {
+			await this.db.write(
+				`MATCH (f:File {path: $filePath})
+				UNWIND $exportedNames AS qName
+				MATCH (fn:Function {qualifiedName: qName, file: $filePath})
+				CREATE (f)-[:EXPORTS]->(fn)`,
+				{ filePath, exportedNames: exportedFunctions }
+			);
 		}
 	}
 
-	private async writeClasses(
-		filePath: string,
-		classes: ExtractedClass[],
-	): Promise<void> {
+	private async writeClasses(filePath: string, classes: ExtractedClass[]): Promise<void> {
 		for (const cls of classes) {
 			// Create class node and CONTAINS edge
 			await this.db.write(
@@ -171,17 +170,10 @@ export class GraphWriter {
 					abstract: cls.abstract,
 					exported: cls.exported,
 					contentHash: cls.contentHash,
-				},
+				}
 			);
 
-			// Create EXPORTS edge if exported
-			if (cls.exported) {
-				await this.db.write(
-					`MATCH (f:File {path: $filePath}), (c:Class {name: $name, file: $filePath})
-					CREATE (f)-[:EXPORTS]->(c)`,
-					{ filePath, name: cls.name },
-				);
-			}
+
 
 			// Create EXTENDS edge
 			if (cls.extends) {
@@ -189,61 +181,76 @@ export class GraphWriter {
 					`MATCH (c:Class {name: $name, file: $filePath}),
 						(parent:Class {name: $parentName})
 					CREATE (c)-[:EXTENDS]->(parent)`,
-					{ filePath, name: cls.name, parentName: cls.extends },
+					{ filePath, name: cls.name, parentName: cls.extends }
 				);
 			}
 
 			// Create IMPLEMENTS edges
-			for (const ifaceName of cls.implements) {
+			if (cls.implements.length > 0) {
 				await this.db.write(
-					`MATCH (c:Class {name: $name, file: $filePath}),
-						(iface:Type {name: $ifaceName})
+					`MATCH (c:Class {name: $name, file: $filePath})
+					UNWIND $interfaces AS ifaceName
+					MATCH (iface:Type {name: ifaceName})
 					CREATE (c)-[:IMPLEMENTS]->(iface)`,
-					{ filePath, name: cls.name, ifaceName },
+					{ filePath, name: cls.name, interfaces: cls.implements }
 				);
 			}
 
 			// Write methods
-			for (const method of cls.methods) {
+			if (cls.methods.length > 0) {
+				const methodsData = cls.methods.map(method => ({
+					name: method.name,
+					qualifiedName: method.qualifiedName,
+					startLine: method.startLine,
+					endLine: method.endLine,
+					async: method.async,
+					isStatic: method.isStatic,
+					isConstructor: method.isConstructor,
+					signature: method.signature,
+					contentHash: method.contentHash,
+				}));
+
 				await this.db.write(
 					`MATCH (c:Class {name: $className, file: $filePath})
+					UNWIND $methods AS method
 					CREATE (m:Function {
-						name: $name,
-						qualifiedName: $qualifiedName,
+						name: method.name,
+						qualifiedName: method.qualifiedName,
 						file: $filePath,
-						startLine: $startLine,
-						endLine: $endLine,
-						async: $async,
+						startLine: method.startLine,
+						endLine: method.endLine,
+						async: method.async,
 						exported: false,
 						isMethod: true,
-						isStatic: $isStatic,
-						isConstructor: $isConstructor,
-						signature: $signature,
-						contentHash: $contentHash
+						isStatic: method.isStatic,
+						isConstructor: method.isConstructor,
+						signature: method.signature,
+						contentHash: method.contentHash
 					})
 					CREATE (c)-[:HAS_METHOD]->(m)`,
 					{
 						filePath,
 						className: cls.name,
-						name: method.name,
-						qualifiedName: method.qualifiedName,
-						startLine: method.startLine,
-						endLine: method.endLine,
-						async: method.async,
-						isStatic: method.isStatic,
-						isConstructor: method.isConstructor,
-						signature: method.signature,
-						contentHash: method.contentHash,
-					},
+						methods: methodsData,
+					}
 				);
 			}
 		}
+
+		// Batch create EXPORTS edges for classes
+		const exportedClassNames = classes.filter(c => c.exported).map(c => c.name);
+		if (exportedClassNames.length > 0) {
+			await this.db.write(
+				`MATCH (f:File {path: $filePath})
+				UNWIND $classNames AS className
+				MATCH (c:Class {name: className, file: $filePath})
+				CREATE (f)-[:EXPORTS]->(c)`,
+				{ filePath, classNames: exportedClassNames }
+			);
+		}
 	}
 
-	private async writeTypes(
-		filePath: string,
-		types: ExtractedType[],
-	): Promise<void> {
+	private async writeTypes(filePath: string, types: ExtractedType[]): Promise<void> {
 		if (types.length === 0) {
 			return;
 		}
@@ -260,106 +267,92 @@ export class GraphWriter {
 				exported: t.exported,
 				contentHash: t.contentHash
 			})
-			CREATE (f)-[:CONTAINS]->(tp)`,
+			CREATE (f)-[:CONTAINS]->(tp)
+			WITH f, tp, t
+			WHERE t.exported = true
+			CREATE (f)-[:EXPORTS]->(tp)`,
 			{
 				filePath,
-				types: types.map((t) => ({
+				types: types.map(t => ({
 					name: t.name,
 					kind: t.typeKind,
 					startLine: t.startLine,
 					endLine: t.endLine,
 					exported: t.exported,
 					contentHash: t.contentHash,
-				})),
-			},
+				}))
+			}
 		);
-
-		const exportedTypes = types.filter((t) => t.exported);
-		if (exportedTypes.length > 0) {
-			await this.db.write(
-				`MATCH (f:File {path: $filePath})
-				UNWIND $exportedTypes AS t
-				MATCH (tp:Type {name: t.name, file: $filePath})
-				CREATE (f)-[:EXPORTS]->(tp)`,
-				{
-					filePath,
-					exportedTypes: exportedTypes.map((t) => ({ name: t.name })),
-				},
-			);
-		}
 	}
 
-	private async writeImports(
-		filePath: string,
-		imports: ExtractedImport[],
-	): Promise<void> {
-		for (const imp of imports) {
-			// Create import node
-			await this.db.write(
-				`CREATE (:Import {
-					source: $source,
-					specifiers: $specifiers,
-					file: $file,
-					line: $line,
-					isDefault: $isDefault,
-					isNamespace: $isNamespace
-				})`,
-				{
-					source: imp.source,
-					specifiers: imp.specifiers.join(", "),
-					file: filePath,
-					line: imp.line,
-					isDefault: imp.isDefault,
-					isNamespace: imp.isNamespace,
-				},
-			);
-
-			// Try to create IMPORTS edge between files
-			// Resolve the import source to a file path (best effort)
-			const rawSource = imp.source;
-			// Normalize the source by stripping leading "./" or "/" segments.
-			const normalizedSource = rawSource.replace(/^(?:\.\/|\/)+/, "");
-			// Generate a small set of plausible file suffixes to match against.
-			const sourceCandidates = [
-				normalizedSource,
-				`${normalizedSource}.ts`,
-				`${normalizedSource}.tsx`,
-				`${normalizedSource}.js`,
-				`${normalizedSource}.jsx`,
-				`${normalizedSource}/index.ts`,
-				`${normalizedSource}/index.tsx`,
-				`${normalizedSource}/index.js`,
-				`${normalizedSource}/index.jsx`,
-			];
-
-			await this.db.write(
-				`MATCH (src:File {path: $srcPath}), (tgt:File)
-				WHERE tgt.path ENDS WITH $source1
-					OR tgt.path ENDS WITH $source2
-					OR tgt.path ENDS WITH $source3
-					OR tgt.path ENDS WITH $source4
-					OR tgt.path ENDS WITH $source5
-					OR tgt.path ENDS WITH $source6
-					OR tgt.path ENDS WITH $source7
-					OR tgt.path ENDS WITH $source8
-					OR tgt.path ENDS WITH $source9
-				CREATE (src)-[:IMPORTS {specifiers: $specifiers, line: $line}]->(tgt)`,
-				{
-					srcPath: filePath,
-					source1: sourceCandidates[0],
-					source2: sourceCandidates[1],
-					source3: sourceCandidates[2],
-					source4: sourceCandidates[3],
-					source5: sourceCandidates[4],
-					source6: sourceCandidates[5],
-					source7: sourceCandidates[6],
-					source8: sourceCandidates[7],
-					source9: sourceCandidates[8],
-					specifiers: imp.specifiers.join(", "),
-					line: imp.line,
-				},
-			);
+	private async writeImports(filePath: string, imports: ExtractedImport[]): Promise<void> {
+		if (imports.length === 0) {
+			return;
 		}
+
+		// Prepare data for UNWIND nodes
+		const importNodes = imports.map((imp) => ({
+			source: imp.source,
+			specifiers: imp.specifiers.join(', '),
+			file: filePath,
+			line: imp.line,
+			isDefault: imp.isDefault,
+			isNamespace: imp.isNamespace,
+		}));
+
+		// Create import nodes in a batch
+		await this.db.write(
+			`UNWIND $imports AS imp
+			CREATE (:Import {
+				source: imp.source,
+				specifiers: imp.specifiers,
+				file: imp.file,
+				line: imp.line,
+				isDefault: imp.isDefault,
+				isNamespace: imp.isNamespace
+			})`,
+			{ imports: importNodes }
+		);
+
+		// Prepare data for UNWIND edges
+		const importEdges = imports.map((imp) => {
+			const rawSource = imp.source;
+			const normalizedSource = rawSource.replace(/^(?:\.\/|\/)+/, '');
+			return {
+				specifiers: imp.specifiers.join(', '),
+				line: imp.line,
+				source1: normalizedSource,
+				source2: `${normalizedSource}.ts`,
+				source3: `${normalizedSource}.tsx`,
+				source4: `${normalizedSource}.js`,
+				source5: `${normalizedSource}.jsx`,
+				source6: `${normalizedSource}/index.ts`,
+				source7: `${normalizedSource}/index.tsx`,
+				source8: `${normalizedSource}/index.js`,
+				source9: `${normalizedSource}/index.jsx`,
+			};
+		});
+
+		// Create IMPORTS edges in a batch
+		await this.db.write(
+			`MATCH (src:File {path: $srcPath})
+			UNWIND $edges AS edge
+			MATCH (tgt:File)
+			WHERE tgt.path ENDS WITH edge.source1
+				OR tgt.path ENDS WITH edge.source2
+				OR tgt.path ENDS WITH edge.source3
+				OR tgt.path ENDS WITH edge.source4
+				OR tgt.path ENDS WITH edge.source5
+				OR tgt.path ENDS WITH edge.source6
+				OR tgt.path ENDS WITH edge.source7
+				OR tgt.path ENDS WITH edge.source8
+				OR tgt.path ENDS WITH edge.source9
+			CREATE (src)-[:IMPORTS {specifiers: edge.specifiers, line: edge.line}]->(tgt)`,
+			{
+				srcPath: filePath,
+				edges: importEdges
+			}
+		);
 	}
 
 	private async writeCallSites(callSites: CallSite[]): Promise<void> {
@@ -379,7 +372,7 @@ export class GraphWriter {
 					calledName: call.calledName,
 					line: call.line,
 					column: call.column,
-				},
+				}
 			);
 		}
 	}
