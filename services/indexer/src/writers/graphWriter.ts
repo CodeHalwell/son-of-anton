@@ -254,14 +254,16 @@ export class GraphWriter {
 					contentHash: t.contentHash,
 				}
 			);
+		}
 
-			if (t.exported) {
-				await this.db.write(
-					`MATCH (f:File {path: $filePath}), (tp:Type {name: $name, file: $filePath})
-					CREATE (f)-[:EXPORTS]->(tp)`,
-					{ filePath, name: t.name }
-				);
-			}
+		const exportedTypes = types.filter(t => t.exported);
+		if (exportedTypes.length > 0) {
+			await this.db.write(
+				`UNWIND $types AS type
+				MATCH (f:File {path: $filePath}), (tp:Type {name: type.name, file: $filePath})
+				CREATE (f)-[:EXPORTS]->(tp)`,
+				{ filePath, types: exportedTypes.map(t => ({ name: t.name })) }
+			);
 		}
 	}
 
