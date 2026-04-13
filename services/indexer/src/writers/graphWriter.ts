@@ -59,34 +59,62 @@ export class GraphWriter {
 	}
 
 	private async writeFunctions(filePath: string, functions: ExtractedFunction[]): Promise<void> {
+		const fnsToCreate: any[] = [];
+		const exportedFns: any[] = [];
+		const returnsEdges: any[] = [];
+		const acceptsEdges: any[] = [];
+
 		for (const fn of functions) {
 			if (fn.isMethod) {
 				// Methods are written as part of their class
 				continue;
 			}
 
-			// Create function node and CONTAINS edge
+			fnsToCreate.push({
+				name: fn.name,
+				qualifiedName: fn.qualifiedName,
+				startLine: fn.startLine,
+				endLine: fn.endLine,
+				async: fn.async,
+				exported: fn.exported,
+				isMethod: fn.isMethod,
+				isStatic: fn.isStatic,
+				isConstructor: fn.isConstructor,
+				signature: fn.signature,
+				contentHash: fn.contentHash,
+			});
+
+			if (fn.exported) {
+				exportedFns.push({ qualifiedName: fn.qualifiedName });
+			}
+
+			if (fn.returnType) {
+				returnsEdges.push({
+					qualifiedName: fn.qualifiedName,
+					returnType: fn.returnType
+				});
+			}
+
+			for (const param of fn.parameters) {
+				if (param.type) {
+					acceptsEdges.push({
+						qualifiedName: fn.qualifiedName,
+						paramType: param.type,
+						paramName: param.name,
+						position: param.position,
+					});
+				}
+			}
+		}
+
+		if (fnsToCreate.length > 0) {
 			await this.db.write(
 				`MATCH (f:File {path: $filePath})
-				CREATE (fn:Function {
-					name: $name,
-					qualifiedName: $qualifiedName,
-					file: $filePath,
-					startLine: $startLine,
-					endLine: $endLine,
-					async: $async,
-					exported: $exported,
-					isMethod: $isMethod,
-					isStatic: $isStatic,
-					isConstructor: $isConstructor,
-					signature: $signature,
-					contentHash: $contentHash
-				})
-				CREATE (f)-[:CONTAINS]->(fn)`,
-				{
-					filePath,
+				UNWIND $functions AS fn
+				CREATE (f)-[:CONTAINS]->(newFn:Function {
 					name: fn.name,
 					qualifiedName: fn.qualifiedName,
+					file: $filePath,
 					startLine: fn.startLine,
 					endLine: fn.endLine,
 					async: fn.async,
@@ -95,46 +123,40 @@ export class GraphWriter {
 					isStatic: fn.isStatic,
 					isConstructor: fn.isConstructor,
 					signature: fn.signature,
-					contentHash: fn.contentHash,
-				}
+					contentHash: fn.contentHash
+				})`,
+				{ filePath, functions: fnsToCreate }
 			);
+		}
 
-			// Create EXPORTS edge if exported
-			if (fn.exported) {
-				await this.db.write(
-					`MATCH (f:File {path: $filePath}), (fn:Function {qualifiedName: $qualifiedName, file: $filePath})
-					CREATE (f)-[:EXPORTS]->(fn)`,
-					{ filePath, qualifiedName: fn.qualifiedName }
-				);
-			}
+		if (exportedFns.length > 0) {
+			await this.db.write(
+				`MATCH (f:File {path: $filePath})
+				UNWIND $exports AS exp
+				MATCH (fn:Function {qualifiedName: exp.qualifiedName, file: $filePath})
+				CREATE (f)-[:EXPORTS]->(fn)`,
+				{ filePath, exports: exportedFns }
+			);
+		}
 
-			// Create RETURNS edge if return type matches a known type
-			if (fn.returnType) {
-				await this.db.write(
-					`MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
-						(t:Type {name: $returnType})
-					CREATE (fn)-[:RETURNS]->(t)`,
-					{ filePath, qualifiedName: fn.qualifiedName, returnType: fn.returnType }
-				);
-			}
+		if (returnsEdges.length > 0) {
+			await this.db.write(
+				`UNWIND $returns AS ret
+				MATCH (fn:Function {qualifiedName: ret.qualifiedName, file: $filePath}),
+					(t:Type {name: ret.returnType})
+				CREATE (fn)-[:RETURNS]->(t)`,
+				{ filePath, returns: returnsEdges }
+			);
+		}
 
-			// Create ACCEPTS edges for parameters with known types
-			for (const param of fn.parameters) {
-				if (param.type) {
-					await this.db.write(
-						`MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
-							(t:Type {name: $paramType})
-						CREATE (fn)-[:ACCEPTS {paramName: $paramName, position: $position}]->(t)`,
-						{
-							filePath,
-							qualifiedName: fn.qualifiedName,
-							paramType: param.type,
-							paramName: param.name,
-							position: param.position,
-						}
-					);
-				}
-			}
+		if (acceptsEdges.length > 0) {
+			await this.db.write(
+				`UNWIND $accepts AS acc
+				MATCH (fn:Function {qualifiedName: acc.qualifiedName, file: $filePath}),
+					(t:Type {name: acc.paramType})
+				CREATE (fn)-[:ACCEPTS {paramName: acc.paramName, position: acc.position}]->(t)`,
+				{ filePath, accepts: acceptsEdges }
+			);
 		}
 	}
 
