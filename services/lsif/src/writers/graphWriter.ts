@@ -24,24 +24,87 @@ export class LsifGraphWriter {
 			errors: 0,
 		};
 
-		// Write REFERENCES edges
-		for (const ref of result.references) {
+		// Write REFERENCES and CALLS edges in batches
+		const BATCH_SIZE = 1000;
+
+		for (let i = 0; i < result.references.length; i += BATCH_SIZE) {
+			const batch = result.references.slice(i, i + BATCH_SIZE);
+
+			// 1. Write REFERENCES edges for the batch
 			try {
-				await this.writeReference(ref);
-				stats.referencesWritten++;
+				await this.db.write(
+					`UNWIND $refs AS ref
+					MATCH (source:Function)
+					WHERE source.file = ref.referenceFile
+						AND source.startLine <= ref.referenceLine
+						AND source.endLine >= ref.referenceLine
+					MATCH (target:Function {name: ref.symbolName})
+					WHERE target.file = ref.definitionFile OR ref.definitionFile = ''
+					CREATE (source)-[:REFERENCES {line: ref.referenceLine, column: ref.referenceColumn, kind: ref.kind}]->(target)`,
+					{ refs: batch }
+				);
+				stats.referencesWritten += batch.length;
 			} catch (err) {
 				stats.errors++;
 				if (stats.errors <= 10) {
-					console.warn('[lsif-writer] Error writing reference:', err instanceof Error ? err.message : err);
+					console.warn('[lsif-writer] Error writing reference batch:', err instanceof Error ? err.message : err);
+				}
+			}
+
+			// 2. Write CALLS edges for the batch (filtering for kind === 'call')
+			const callRefs = batch.filter(ref => ref.kind === 'call');
+			if (callRefs.length > 0) {
+				try {
+					await this.db.write(
+						`UNWIND $refs AS ref
+						MATCH (caller:Function)
+						WHERE caller.file = ref.referenceFile
+							AND caller.startLine <= ref.referenceLine
+							AND caller.endLine >= ref.referenceLine
+						MATCH (called:Function {name: ref.symbolName})
+						WHERE called.file = ref.definitionFile OR ref.definitionFile = ''
+						MERGE (caller)-[:CALLS {line: ref.referenceLine, column: ref.referenceColumn}]->(called)`,
+						{ refs: callRefs }
+					);
+					stats.callsWritten += callRefs.length;
+				} catch (err) {
+					stats.errors++;
+					if (stats.errors <= 10) {
+						console.warn('[lsif-writer] Error writing calls batch:', err instanceof Error ? err.message : err);
+					}
 				}
 			}
 		}
 
-		// Write type relations (EXTENDS, IMPLEMENTS)
-		for (const rel of result.typeRelations) {
+		// Write type relations (EXTENDS, IMPLEMENTS) in batches
+		const extendsRels = result.typeRelations.filter(rel => rel.relationType === 'extends');
+		const implementsRels = result.typeRelations.filter(rel => rel.relationType === 'implements');
+
+		for (let i = 0; i < extendsRels.length; i += BATCH_SIZE) {
+			const batch = extendsRels.slice(i, i + BATCH_SIZE);
 			try {
-				await this.writeTypeRelation(rel);
-				stats.typeRelationsWritten++;
+				await this.db.write(
+					`UNWIND $rels AS rel
+					MATCH (child:Class {name: rel.childName}), (parent:Class {name: rel.parentName})
+					MERGE (child)-[:EXTENDS]->(parent)`,
+					{ rels: batch }
+				);
+				stats.typeRelationsWritten += batch.length;
+			} catch (err) {
+				stats.errors++;
+			}
+		}
+
+		for (let i = 0; i < implementsRels.length; i += BATCH_SIZE) {
+			const batch = implementsRels.slice(i, i + BATCH_SIZE);
+			try {
+				await this.db.write(
+					`UNWIND $rels AS rel
+					MATCH (child:Class {name: rel.childName}), (iface:Type {name: rel.parentName})
+					MERGE (child)-[:IMPLEMENTS]->(iface)`,
+					{ rels: batch }
+				);
+				stats.typeRelationsWritten += batch.length;
 			} catch (err) {
 				stats.errors++;
 			}
@@ -57,70 +120,6 @@ export class LsifGraphWriter {
 		return stats;
 	}
 
-	/**
-	 * Write a REFERENCES edge between symbols.
-	 * Matches against existing Function/Class/Type nodes by name and file.
-	 */
-	private async writeReference(ref: SymbolReference): Promise<void> {
-		// Try to match reference to existing nodes
-		// First try: match by function name in the reference file
-		await this.db.write(
-			`MATCH (source:Function)
-			WHERE source.file = $refFile
-				AND source.startLine <= $refLine
-				AND source.endLine >= $refLine
-			MATCH (target:Function {name: $symbolName})
-			WHERE target.file = $defFile OR $defFile = ''
-			CREATE (source)-[:REFERENCES {line: $refLine, column: $refColumn, kind: $kind}]->(target)`,
-			{
-				refFile: ref.referenceFile,
-				refLine: ref.referenceLine,
-				symbolName: ref.symbolName,
-				defFile: ref.definitionFile,
-				refColumn: ref.referenceColumn,
-				kind: ref.kind,
-			}
-		);
-
-		// If the reference is a call, also create a CALLS edge
-		if (ref.kind === 'call') {
-			await this.db.write(
-				`MATCH (caller:Function)
-				WHERE caller.file = $refFile
-					AND caller.startLine <= $refLine
-					AND caller.endLine >= $refLine
-				MATCH (called:Function {name: $symbolName})
-				WHERE called.file = $defFile OR $defFile = ''
-				MERGE (caller)-[:CALLS {line: $refLine, column: $refColumn}]->(called)`,
-				{
-					refFile: ref.referenceFile,
-					refLine: ref.referenceLine,
-					symbolName: ref.symbolName,
-					defFile: ref.definitionFile,
-					refColumn: ref.referenceColumn,
-				}
-			);
-		}
-	}
-
-	/**
-	 * Write EXTENDS or IMPLEMENTS edges from LSIF type hierarchy data.
-	 */
-	private async writeTypeRelation(rel: TypeRelation): Promise<void> {
-		if (rel.relationType === 'extends') {
-			await this.db.write(
-				`MATCH (child:Class {name: $childName}), (parent:Class {name: $parentName})
-				MERGE (child)-[:EXTENDS]->(parent)`,
-				{ childName: rel.childName, parentName: rel.parentName }
-			);
-		} else if (rel.relationType === 'implements') {
-			await this.db.write(
-				`MATCH (child:Class {name: $childName}), (iface:Type {name: $parentName})
-				MERGE (child)-[:IMPLEMENTS]->(iface)`,
-				{ childName: rel.childName, parentName: rel.parentName }
-			);
-		}
-	}
 }
 
 export interface WriteStats {
