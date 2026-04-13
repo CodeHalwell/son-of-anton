@@ -1,7 +1,7 @@
 // Son of Anton — Graph Writer
 // Writes extracted symbols and relationships to FalkorDB.
 
-import { FalkorDBClient } from '../clients/falkordb';
+import { FalkorDBClient } from "../clients/falkordb";
 import {
 	FileExtractionResult,
 	ExtractedFunction,
@@ -9,7 +9,7 @@ import {
 	ExtractedType,
 	ExtractedImport,
 	CallSite,
-} from '../extractors/symbolExtractor';
+} from "../extractors/symbolExtractor";
 
 export class GraphWriter {
 	private readonly db: FalkorDBClient;
@@ -27,7 +27,7 @@ export class GraphWriter {
 		language: string,
 		contentHash: string,
 		lineCount: number,
-		extraction: FileExtractionResult
+		extraction: FileExtractionResult,
 	): Promise<void> {
 		// Delete existing data for this file first
 		await this.db.deleteFileData(filePath);
@@ -47,7 +47,7 @@ export class GraphWriter {
 				lastModified: Date.now(),
 				hash: contentHash,
 				lineCount,
-			}
+			},
 		);
 
 		// Write all symbols and relationships
@@ -58,7 +58,10 @@ export class GraphWriter {
 		await this.writeCallSites(extraction.callSites);
 	}
 
-	private async writeFunctions(filePath: string, functions: ExtractedFunction[]): Promise<void> {
+	private async writeFunctions(
+		filePath: string,
+		functions: ExtractedFunction[],
+	): Promise<void> {
 		for (const fn of functions) {
 			if (fn.isMethod) {
 				// Methods are written as part of their class
@@ -96,7 +99,7 @@ export class GraphWriter {
 					isConstructor: fn.isConstructor,
 					signature: fn.signature,
 					contentHash: fn.contentHash,
-				}
+				},
 			);
 
 			// Create EXPORTS edge if exported
@@ -104,7 +107,7 @@ export class GraphWriter {
 				await this.db.write(
 					`MATCH (f:File {path: $filePath}), (fn:Function {qualifiedName: $qualifiedName, file: $filePath})
 					CREATE (f)-[:EXPORTS]->(fn)`,
-					{ filePath, qualifiedName: fn.qualifiedName }
+					{ filePath, qualifiedName: fn.qualifiedName },
 				);
 			}
 
@@ -114,7 +117,11 @@ export class GraphWriter {
 					`MATCH (fn:Function {qualifiedName: $qualifiedName, file: $filePath}),
 						(t:Type {name: $returnType})
 					CREATE (fn)-[:RETURNS]->(t)`,
-					{ filePath, qualifiedName: fn.qualifiedName, returnType: fn.returnType }
+					{
+						filePath,
+						qualifiedName: fn.qualifiedName,
+						returnType: fn.returnType,
+					},
 				);
 			}
 
@@ -131,14 +138,17 @@ export class GraphWriter {
 							paramType: param.type,
 							paramName: param.name,
 							position: param.position,
-						}
+						},
 					);
 				}
 			}
 		}
 	}
 
-	private async writeClasses(filePath: string, classes: ExtractedClass[]): Promise<void> {
+	private async writeClasses(
+		filePath: string,
+		classes: ExtractedClass[],
+	): Promise<void> {
 		for (const cls of classes) {
 			// Create class node and CONTAINS edge
 			await this.db.write(
@@ -161,7 +171,7 @@ export class GraphWriter {
 					abstract: cls.abstract,
 					exported: cls.exported,
 					contentHash: cls.contentHash,
-				}
+				},
 			);
 
 			// Create EXPORTS edge if exported
@@ -169,7 +179,7 @@ export class GraphWriter {
 				await this.db.write(
 					`MATCH (f:File {path: $filePath}), (c:Class {name: $name, file: $filePath})
 					CREATE (f)-[:EXPORTS]->(c)`,
-					{ filePath, name: cls.name }
+					{ filePath, name: cls.name },
 				);
 			}
 
@@ -179,7 +189,7 @@ export class GraphWriter {
 					`MATCH (c:Class {name: $name, file: $filePath}),
 						(parent:Class {name: $parentName})
 					CREATE (c)-[:EXTENDS]->(parent)`,
-					{ filePath, name: cls.name, parentName: cls.extends }
+					{ filePath, name: cls.name, parentName: cls.extends },
 				);
 			}
 
@@ -189,7 +199,7 @@ export class GraphWriter {
 					`MATCH (c:Class {name: $name, file: $filePath}),
 						(iface:Type {name: $ifaceName})
 					CREATE (c)-[:IMPLEMENTS]->(iface)`,
-					{ filePath, name: cls.name, ifaceName }
+					{ filePath, name: cls.name, ifaceName },
 				);
 			}
 
@@ -224,48 +234,65 @@ export class GraphWriter {
 						isConstructor: method.isConstructor,
 						signature: method.signature,
 						contentHash: method.contentHash,
-					}
+					},
 				);
 			}
 		}
 	}
 
-	private async writeTypes(filePath: string, types: ExtractedType[]): Promise<void> {
-		for (const t of types) {
-			await this.db.write(
-				`MATCH (f:File {path: $filePath})
-				CREATE (tp:Type {
-					name: $name,
-					kind: $kind,
-					file: $filePath,
-					startLine: $startLine,
-					endLine: $endLine,
-					exported: $exported,
-					contentHash: $contentHash
-				})
-				CREATE (f)-[:CONTAINS]->(tp)`,
-				{
-					filePath,
+	private async writeTypes(
+		filePath: string,
+		types: ExtractedType[],
+	): Promise<void> {
+		if (types.length === 0) {
+			return;
+		}
+
+		await this.db.write(
+			`MATCH (f:File {path: $filePath})
+			UNWIND $types AS t
+			CREATE (tp:Type {
+				name: t.name,
+				kind: t.kind,
+				file: $filePath,
+				startLine: t.startLine,
+				endLine: t.endLine,
+				exported: t.exported,
+				contentHash: t.contentHash
+			})
+			CREATE (f)-[:CONTAINS]->(tp)`,
+			{
+				filePath,
+				types: types.map((t) => ({
 					name: t.name,
 					kind: t.typeKind,
 					startLine: t.startLine,
 					endLine: t.endLine,
 					exported: t.exported,
 					contentHash: t.contentHash,
-				}
-			);
+				})),
+			},
+		);
 
-			if (t.exported) {
-				await this.db.write(
-					`MATCH (f:File {path: $filePath}), (tp:Type {name: $name, file: $filePath})
-					CREATE (f)-[:EXPORTS]->(tp)`,
-					{ filePath, name: t.name }
-				);
-			}
+		const exportedTypes = types.filter((t) => t.exported);
+		if (exportedTypes.length > 0) {
+			await this.db.write(
+				`MATCH (f:File {path: $filePath})
+				UNWIND $exportedTypes AS t
+				MATCH (tp:Type {name: t.name, file: $filePath})
+				CREATE (f)-[:EXPORTS]->(tp)`,
+				{
+					filePath,
+					exportedTypes: exportedTypes.map((t) => ({ name: t.name })),
+				},
+			);
 		}
 	}
 
-	private async writeImports(filePath: string, imports: ExtractedImport[]): Promise<void> {
+	private async writeImports(
+		filePath: string,
+		imports: ExtractedImport[],
+	): Promise<void> {
 		for (const imp of imports) {
 			// Create import node
 			await this.db.write(
@@ -279,19 +306,19 @@ export class GraphWriter {
 				})`,
 				{
 					source: imp.source,
-					specifiers: imp.specifiers.join(', '),
+					specifiers: imp.specifiers.join(", "),
 					file: filePath,
 					line: imp.line,
 					isDefault: imp.isDefault,
 					isNamespace: imp.isNamespace,
-				}
+				},
 			);
 
 			// Try to create IMPORTS edge between files
 			// Resolve the import source to a file path (best effort)
 			const rawSource = imp.source;
 			// Normalize the source by stripping leading "./" or "/" segments.
-			const normalizedSource = rawSource.replace(/^(?:\.\/|\/)+/, '');
+			const normalizedSource = rawSource.replace(/^(?:\.\/|\/)+/, "");
 			// Generate a small set of plausible file suffixes to match against.
 			const sourceCandidates = [
 				normalizedSource,
@@ -328,9 +355,9 @@ export class GraphWriter {
 					source7: sourceCandidates[6],
 					source8: sourceCandidates[7],
 					source9: sourceCandidates[8],
-					specifiers: imp.specifiers.join(', '),
+					specifiers: imp.specifiers.join(", "),
 					line: imp.line,
-				}
+				},
 			);
 		}
 	}
@@ -352,7 +379,7 @@ export class GraphWriter {
 					calledName: call.calledName,
 					line: call.line,
 					column: call.column,
-				}
+				},
 			);
 		}
 	}
