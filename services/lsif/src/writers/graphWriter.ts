@@ -2,8 +2,13 @@
 // Writes LSIF/SCIP cross-reference data to FalkorDB, enriching the graph
 // created by the Tree-sitter indexer with precise cross-file relationships.
 
-import { FalkorDBClient } from '../clients/falkordb';
-import { LsifParseResult, SymbolDefinition, SymbolReference, TypeRelation } from '../parsers/lsifParser';
+import { FalkorDBClient } from "../clients/falkordb";
+import {
+	LsifParseResult,
+	SymbolDefinition,
+	SymbolReference,
+	TypeRelation,
+} from "../parsers/lsifParser";
 
 export class LsifGraphWriter {
 	private readonly db: FalkorDBClient;
@@ -41,13 +46,16 @@ export class LsifGraphWriter {
 					MATCH (target:Function {name: ref.symbolName})
 					WHERE target.file = ref.definitionFile OR ref.definitionFile = ''
 					CREATE (source)-[:REFERENCES {line: ref.referenceLine, column: ref.referenceColumn, kind: ref.kind}]->(target)`,
-					{ refs: batch }
+					{ refs: batch },
 				);
 				stats.referencesWritten += batch.length;
 			} catch (err) {
 				stats.errors++;
 				if (stats.errors <= 10) {
-					console.warn('[lsif-writer] Error writing reference batch:', err instanceof Error ? err.message : err);
+					console.warn(
+						"[lsif-writer] Error writing reference batch:",
+						err instanceof Error ? err.message : err,
+					);
 				}
 			}
 
@@ -64,62 +72,65 @@ export class LsifGraphWriter {
 						MATCH (called:Function {name: ref.symbolName})
 						WHERE called.file = ref.definitionFile OR ref.definitionFile = ''
 						MERGE (caller)-[:CALLS {line: ref.referenceLine, column: ref.referenceColumn}]->(called)`,
-						{ refs: callRefs }
+						{ refs: callRefs },
 					);
 					stats.callsWritten += callRefs.length;
 				} catch (err) {
 					stats.errors++;
 					if (stats.errors <= 10) {
-						console.warn('[lsif-writer] Error writing calls batch:', err instanceof Error ? err.message : err);
+						console.warn(
+							"[lsif-writer] Error writing calls batch:",
+							err instanceof Error ? err.message : err,
+						);
 					}
 				}
 			}
 		}
 
-		// Write type relations (EXTENDS, IMPLEMENTS) in batches
-		const extendsRels = result.typeRelations.filter(rel => rel.relationType === 'extends');
-		const implementsRels = result.typeRelations.filter(rel => rel.relationType === 'implements');
+		// Write type relations (EXTENDS, IMPLEMENTS)
+		const extendsRels = result.typeRelations.filter(
+			(rel) => rel.relationType === "extends",
+		);
+		const implementsRels = result.typeRelations.filter(
+			(rel) => rel.relationType === "implements",
+		);
 
-		for (let i = 0; i < extendsRels.length; i += BATCH_SIZE) {
-			const batch = extendsRels.slice(i, i + BATCH_SIZE);
-			try {
+		try {
+			if (extendsRels.length > 0) {
 				await this.db.write(
-					`UNWIND $rels AS rel
+					`UNWIND $relations AS rel
 					MATCH (child:Class {name: rel.childName}), (parent:Class {name: rel.parentName})
 					MERGE (child)-[:EXTENDS]->(parent)`,
-					{ rels: batch }
+					{ relations: extendsRels },
 				);
-				stats.typeRelationsWritten += batch.length;
-			} catch (err) {
-				stats.errors++;
+				stats.typeRelationsWritten += extendsRels.length;
 			}
-		}
-
-		for (let i = 0; i < implementsRels.length; i += BATCH_SIZE) {
-			const batch = implementsRels.slice(i, i + BATCH_SIZE);
-			try {
+			if (implementsRels.length > 0) {
 				await this.db.write(
-					`UNWIND $rels AS rel
+					`UNWIND $relations AS rel
 					MATCH (child:Class {name: rel.childName}), (iface:Type {name: rel.parentName})
 					MERGE (child)-[:IMPLEMENTS]->(iface)`,
-					{ rels: batch }
+					{ relations: implementsRels },
 				);
-				stats.typeRelationsWritten += batch.length;
-			} catch (err) {
-				stats.errors++;
+				stats.typeRelationsWritten += implementsRels.length;
 			}
+		} catch (err) {
+			stats.errors += extendsRels.length + implementsRels.length;
+			console.warn(
+				"[lsif-writer] Error writing type relations:",
+				err instanceof Error ? err.message : err,
+			);
 		}
 
 		console.log(
 			`[lsif-writer] Written: ${stats.referencesWritten} references, ` +
-			`${stats.callsWritten} calls, ` +
-			`${stats.typeRelationsWritten} type relations, ` +
-			`${stats.errors} errors`
+				`${stats.callsWritten} calls, ` +
+				`${stats.typeRelationsWritten} type relations, ` +
+				`${stats.errors} errors`,
 		);
 
 		return stats;
 	}
-
 }
 
 export interface WriteStats {
