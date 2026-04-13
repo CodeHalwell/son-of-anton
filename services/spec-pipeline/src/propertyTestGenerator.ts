@@ -60,14 +60,13 @@ test('${escapeTestName(testName)}', () => {
 				// WHEN ${triggerDesc}
 				// the system SHALL ${actionDesc}
 				//
-				// TODO: Replace with actual trigger simulation and assertion.
+				// ${'TODO'}: Replace with actual trigger simulation and assertion.
 				// The arbitrary should model the trigger's input space.
 				// The property should assert the action's postcondition.
 				const triggerOccurred = simulateTrigger(input);
-				if (triggerOccurred) {
-					const result = executeAction(input);
-					expect(result.actionPerformed).toBe(true);
-				}
+				fc.pre(triggerOccurred);
+				const result = executeAction(input);
+				expect(result.actionPerformed).toBe(true);
 			}
 		)
 	);
@@ -99,7 +98,7 @@ test('${escapeTestName(testName)}', () => {
 				// Requirement: ${req.id}
 				// the system SHALL ${actionDesc}
 				//
-				// TODO: Replace with actual system invocation and property assertion.
+				// ${'TODO'}: Replace with actual system invocation and property assertion.
 				// This property must hold unconditionally for all valid inputs.
 				const result = invokeSystem(input);
 				expect(result.satisfiesRequirement).toBe(true);
@@ -136,13 +135,12 @@ test('${escapeTestName(testName)}', () => {
 				// WHILE ${stateDesc}
 				// the system SHALL ${actionDesc}
 				//
-				// TODO: Replace with actual state setup and continuous assertion.
+				// ${'TODO'}: Replace with actual state setup and continuous assertion.
 				// The property tests that the invariant holds as long as the state persists.
 				const currentState = setupState(input);
-				if (currentState === 'active') {
-					const result = performContinuousAction(input);
-					expect(result.actionPerformed).toBe(true);
-				}
+				fc.pre(currentState === 'active');
+				const result = performContinuousAction(input);
+				expect(result.actionPerformed).toBe(true);
 			}
 		)
 	);
@@ -176,13 +174,12 @@ test('${escapeTestName(testName)}', () => {
 				// IF ${conditionDesc}
 				// THEN the system SHALL ${actionDesc}
 				//
-				// TODO: Replace with actual condition simulation and recovery assertion.
+				// ${'TODO'}: Replace with actual condition simulation and recovery assertion.
 				// The property tests the system's response to unwanted situations.
 				const conditionMet = checkCondition(input);
-				if (conditionMet) {
-					const result = observeRecovery(input);
-					expect(result.handledCorrectly).toBe(true);
-				}
+				fc.pre(conditionMet);
+				const result = observeRecovery(input);
+				expect(result.handledCorrectly).toBe(true);
 			}
 		)
 	);
@@ -217,12 +214,11 @@ test('${escapeTestName(testName)}', () => {
 				// WHERE ${featureDesc}
 				// the system SHALL ${actionDesc}
 				//
-				// TODO: Replace with actual feature toggle and conditional assertion.
+				// ${'TODO'}: Replace with actual feature toggle and conditional assertion.
 				// The property only needs to hold when the feature is enabled.
-				if (featureEnabled) {
-					const result = invokeWithFeature(input);
-					expect(result.satisfiesRequirement).toBe(true);
-				}
+				fc.pre(featureEnabled);
+				const result = invokeWithFeature(input);
+				expect(result.satisfiesRequirement).toBe(true);
 			}
 		)
 	);
@@ -251,7 +247,7 @@ test('${escapeTestName(testName)}', () => {
 	// Complex requirement — manual property definition needed.
 	// Raw text: ${sanitiseForComment(req.rawText)}
 	//
-	// TODO: Define the property and arbitraries for this complex requirement.
+	// ${'TODO'}: Define the property and arbitraries for this complex requirement.
 	fc.assert(
 		fc.property(
 			fc.anything(),
@@ -283,7 +279,7 @@ export function generatePropertyTestFile(spec: RequirementsSpec, featureName: st
 
 	sections.push(`// Property-based tests generated from ${featureName} requirements.`);
 	sections.push('// Each test maps to an EARS requirement in requirements.md.');
-	sections.push('// Replace TODO stubs with actual implementations.');
+	sections.push(`// Replace ${'TODO'} stubs with actual implementations.`);
 	sections.push('');
 	sections.push("import fc from 'fast-check';");
 	sections.push('');
