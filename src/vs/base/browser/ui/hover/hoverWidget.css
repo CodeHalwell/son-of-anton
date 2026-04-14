@@ -210,3 +210,9 @@
 	-webkit-user-select: none;
 	user-select: none;
 }
+
+.monaco-hover-content .action-container:focus,
+.monaco-hover-content .action-container:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
