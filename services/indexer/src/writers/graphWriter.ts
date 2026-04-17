@@ -369,24 +369,28 @@ export class GraphWriter {
 	}
 
 	private async writeCallSites(callSites: CallSite[]): Promise<void> {
-		for (const call of callSites) {
-			if (!call.callerName || !call.calledName) {
-				continue;
-			}
+		const validCallSites = callSites
+			.filter(call => call.callerName && call.calledName)
+			.map(call => ({
+				callerName: call.callerName,
+				calledName: call.calledName,
+				line: call.line,
+				column: call.column,
+			}));
 
-			// Create CALLS edge between functions (best effort matching by name)
-			await this.db.write(
-				`MATCH (caller:Function {name: $callerName}),
-					(called:Function {name: $calledName})
-				WHERE caller <> called
-				CREATE (caller)-[:CALLS {line: $line, column: $column}]->(called)`,
-				{
-					callerName: call.callerName,
-					calledName: call.calledName,
-					line: call.line,
-					column: call.column,
-				}
-			);
+		if (validCallSites.length === 0) {
+			return;
 		}
+
+		// Create CALLS edge between functions (best effort matching by name)
+		// Optimized to use UNWIND to batch multiple db queries into a single one to solve the N+1 problem.
+		await this.db.write(
+			`UNWIND $calls AS call
+			MATCH (caller:Function {name: call.callerName}),
+				(called:Function {name: call.calledName})
+			WHERE caller <> called
+			CREATE (caller)-[:CALLS {line: call.line, column: call.column}]->(called)`,
+			{ calls: validCallSites }
+		);
 	}
 }
