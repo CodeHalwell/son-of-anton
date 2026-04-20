@@ -2394,13 +2394,15 @@ export class NotebookEditorWidget extends Disposable implements INotebookEditorD
 		const previousIndex = this._list.getViewIndex(previousSelection)!;
 
 		const cellsInSelectionRange = this.getCellsInViewRange(selectedIndex, previousIndex);
+		// Optimize performance by using a Set for faster lookups during filtering
+		const cellsInSelectionRangeSet = new Set(cellsInSelectionRange);
 		if (isSelected) {
 			// Deselect
-			this._list.selectElements(currentSelections.filter(current => !cellsInSelectionRange.includes(current)));
+			this._list.selectElements(currentSelections.filter(current => !cellsInSelectionRangeSet.has(current)));
 		} else {
 			// Add to selection
 			this.focusElement(selectedCell);
-			this._list.selectElements([...currentSelections.filter(current => !cellsInSelectionRange.includes(current)), ...cellsInSelectionRange]);
+			this._list.selectElements([...currentSelections.filter(current => !cellsInSelectionRangeSet.has(current)), ...cellsInSelectionRange]);
 		}
 	}
 
