@@ -1568,7 +1568,11 @@ async function webviewPreloads(ctx: PreloadContext) {
 		}
 
 
-		matches = matches.filter(match => options.findIds.length ? options.findIds.includes(match.cellId) : true);
+		// ⚡ Bolt: Optimize notebook cell filtering by replacing O(n*m) Array.includes with O(n+m) Set.has
+		if (options.findIds.length) {
+			const findIdsSet = new Set(options.findIds);
+			matches = matches.filter(match => findIdsSet.has(match.cellId));
+		}
 		_highlighter.addHighlights(matches, options.ownerID);
 		window.document.getSelection()?.removeAllRanges();
 
