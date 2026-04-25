@@ -1568,7 +1568,9 @@ async function webviewPreloads(ctx: PreloadContext) {
 		}
 
 
-		matches = matches.filter(match => options.findIds.length ? options.findIds.includes(match.cellId) : true);
+		// Optimize: convert findIds to a Set to reduce time complexity from O(N*M) to O(N+M)
+		const findIdsSet = options.findIds.length ? new Set(options.findIds) : undefined;
+		matches = matches.filter(match => findIdsSet ? findIdsSet.has(match.cellId) : true);
 		_highlighter.addHighlights(matches, options.ownerID);
 		window.document.getSelection()?.removeAllRanges();
 
