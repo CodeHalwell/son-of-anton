@@ -1568,7 +1568,8 @@ async function webviewPreloads(ctx: PreloadContext) {
 		}
 
 
-		matches = matches.filter(match => options.findIds.length ? options.findIds.includes(match.cellId) : true);
+		const findIdsSet = options.findIds.length ? new Set(options.findIds) : undefined;
+		matches = matches.filter(match => findIdsSet ? findIdsSet.has(match.cellId) : true);
 		_highlighter.addHighlights(matches, options.ownerID);
 		window.document.getSelection()?.removeAllRanges();
 
