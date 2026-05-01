@@ -75,7 +75,7 @@ export class BrokerServer {
 		}
 
 		await new Promise<void>((resolve, reject) => {
-			this.server = net.createServer(socket => this.handleConnection(socket));
+			this.server = net.createServer((socket: net.Socket) => this.handleConnection(socket));
 			this.server.on('error', reject);
 			this.server.listen(socketPath, () => resolve());
 		});

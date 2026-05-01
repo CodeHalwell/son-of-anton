@@ -7,9 +7,6 @@
 			"ES2024",
 			"DOM"
 		],
-		"types": [
-			"node"
-		],
 		"skipLibCheck": true
 	},
 	"include": [
