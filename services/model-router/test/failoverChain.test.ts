@@ -257,6 +257,31 @@ describe('FailoverChain.send pre-stream failover', () => {
 		assert.deepStrictEqual(got, fallback);
 	});
 
+	test('discards message_start preamble from failed adapter before content', async () => {
+		// Primary emits message_start then fails before any content — the
+		// caller should never see the failed adapter's message_start.
+		const primaryWithPreamble: AgentEvent[] = [
+			{ type: 'message_start', requestId: 'r', provider: 'primary', model: 'm' },
+			{ type: 'error', code: 'server_error', message: '503', retryable: true },
+			{ type: 'message_stop', stopReason: 'error' },
+		];
+		const fallback: AgentEvent[] = [
+			{ type: 'message_start', requestId: 'r', provider: 'fb', model: 'fm' },
+			{ type: 'text_delta', text: 'Fallback response' },
+			{ type: 'message_stop', stopReason: 'end_turn' },
+		];
+		const chain = new FailoverChain([
+			slot(adapterFromEvents('primary', primaryWithPreamble)),
+			slot(adapterFromEvents('fallback', fallback)),
+		]);
+		const got = await collect(chain.send(BASE_REQUEST, ABORT));
+
+		// The failed primary's message_start must not be in the output.
+		const messageStarts = got.filter(e => e.type === 'message_start');
+		assert.strictEqual(messageStarts.length, 1, 'exactly one message_start from the fallback');
+		assert.deepStrictEqual(got, fallback);
+	});
+
 	test('silently skips a thrown exception before content and uses fallback', async () => {
 		const fallback: AgentEvent[] = [
 			{ type: 'message_start', requestId: 'r', provider: 'fb', model: 'm' },

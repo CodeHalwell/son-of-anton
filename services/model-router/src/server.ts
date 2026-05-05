@@ -21,8 +21,9 @@ function loadConfig(): ModelRoutesConfig {
 }
 
 function loadFailoverConfig(): FailoverConfig {
+	const explicitPath = process.env.MODEL_FAILOVER_CONFIG;
 	const candidates = [
-		process.env.MODEL_FAILOVER_CONFIG,
+		explicitPath,
 		join(process.cwd(), '.son-of-anton', 'routing.json'),
 		join(process.cwd(), '..', '..', '.son-of-anton', 'routing.json'),
 	].filter((p): p is string => typeof p === 'string');
@@ -31,8 +32,13 @@ function loadFailoverConfig(): FailoverConfig {
 		if (existsSync(path)) {
 			try {
 				return JSON.parse(readFileSync(path, 'utf-8')) as FailoverConfig;
-			} catch {
-				// corrupt file — continue to next candidate
+			} catch (err) {
+				if (path === explicitPath) {
+					// Explicit path must be readable — surface this loudly.
+					console.error(`[failover] Failed to parse explicit failover config at ${path}:`, (err as Error).message);
+				} else {
+					console.warn(`[failover] Skipping unreadable failover config at ${path}:`, (err as Error).message);
+				}
 			}
 		}
 	}
@@ -63,10 +69,14 @@ function resolveProvidersForRole(
 ): ResolvedProvider[] {
 	const roleConfig = failoverConfig[agentRole] ?? failoverConfig['*'];
 
-	if (roleConfig) {
-		const entries = [roleConfig.primary, ...roleConfig.fallback];
+	if (roleConfig?.primary) {
+		const fallbackList = Array.isArray(roleConfig.fallback) ? roleConfig.fallback : [];
+		const entries = [roleConfig.primary, ...fallbackList];
 		const resolved: ResolvedProvider[] = [];
 		for (const entry of entries) {
+			if (!entry?.provider || !entry?.model) {
+				continue;
+			}
 			try {
 				const config = router.resolveProvider(entry.provider);
 				resolved.push({ provider: entry.provider, model: entry.model, config });
@@ -134,8 +144,13 @@ export function createServer() {
 		const providers = resolveProvidersForRole(context.agentRole, context, router, failoverConfig);
 
 		let lastError: Error | null = null;
+		let lastProvider = providers[0]?.provider ?? 'unknown';
+		let lastModel = providers[0]?.model ?? 'unknown';
 
 		for (const { provider, model, config: providerConfig } of providers) {
+			lastProvider = provider;
+			lastModel = model;
+
 			try {
 				const translatedBody = providerConfig.format === 'anthropic'
 					? toAnthropicFormat(messages, systemPrompt, maxTokens, model, isStreaming)
@@ -152,13 +167,14 @@ export function createServer() {
 
 				if (!fetchResponse.ok) {
 					const errorBody = await fetchResponse.text();
-					const retryable = fetchResponse.status >= 500;
+					// 5xx = server error; 429 = rate-limited — both warrant trying the next provider.
+					const retryable = fetchResponse.status >= 500 || fetchResponse.status === 429;
 					lastError = new Error(`Provider ${provider} returned ${fetchResponse.status}: ${errorBody}`);
 					if (!retryable) {
 						// Client error — do not try fallbacks
 						break;
 					}
-					// Server error — try next provider
+					// Server error or rate-limit — try next provider
 					continue;
 				}
 
@@ -182,6 +198,9 @@ export function createServer() {
 					} else {
 						res.end();
 					}
+					// NOTE: mid-stream failover for the SSE pipe path is deferred to the
+					// adapter-registry task.  Once ProviderAdapters are wired into server.ts,
+					// FailoverChain.send() will handle mid-stream connection resets cleanly.
 					return;
 				}
 
@@ -220,15 +239,15 @@ export function createServer() {
 			}
 		}
 
-		// All providers exhausted
+		// All providers exhausted — attribute the failure to the last attempted provider.
 		const latencyMs = Date.now() - startTime;
 		console.error('All providers failed. Last error:', lastError?.message);
 
 		metrics.record({
 			id: randomUUID(),
 			timestamp: Date.now(),
-			provider: providers[0]?.provider ?? 'unknown',
-			model: providers[0]?.model ?? 'unknown',
+			provider: lastProvider,
+			model: lastModel,
 			agentRole: context.agentRole,
 			taskType: context.taskType ?? '',
 			taskId: context.taskId ?? '',
