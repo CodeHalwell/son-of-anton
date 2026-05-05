@@ -1,13 +1,19 @@
 // Copyright (c) Son-Of-Anton. All rights reserved.
 // Licensed under the MIT License.
 
+export interface FallbackEntry {
+	readonly provider: string;
+	readonly model: string;
+}
+
 export interface RouteConfig {
 	name: string;
 	match: RouteMatch;
 	provider?: string;
 	model?: string;
 	priority: number;
-	fallback?: { provider: string; model: string };
+	/** Ordered list of fallback providers tried in sequence on failure. */
+	fallback?: ReadonlyArray<FallbackEntry>;
 	split?: SplitConfig[];
 }
 

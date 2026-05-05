@@ -1,9 +1,15 @@
 // Copyright (c) Son-Of-Anton. All rights reserved.
 // Licensed under the MIT License.
 
-import type { ModelRoutesConfig, ProviderConfig, RouteConfig, RoutingContext, SplitConfig } from './types.js';
+import type { FallbackEntry, ModelRoutesConfig, ProviderConfig, RouteConfig, RoutingContext, SplitConfig } from './types.js';
 
 export interface ResolvedRoute {
+	provider: string;
+	model: string;
+	providerConfig: ProviderConfig;
+}
+
+export interface ResolvedFallback {
 	provider: string;
 	model: string;
 	providerConfig: ProviderConfig;
@@ -26,6 +32,21 @@ export class ModelRouter {
 		}
 
 		throw new Error(`No matching route found for agentRole="${context.agentRole}" taskType="${context.taskType ?? ''}"`);
+	}
+
+	/**
+	 * Returns the ordered list of resolved fallback entries for a given route.
+	 * Returns an empty array when no fallback chain is configured.
+	 */
+	resolveFallbackChain(route: RouteConfig): ResolvedFallback[] {
+		if (!route.fallback || route.fallback.length === 0) {
+			return [];
+		}
+		return route.fallback.map((fb: FallbackEntry) => ({
+			provider: fb.provider,
+			model: fb.model,
+			providerConfig: this.resolveProvider(fb.provider),
+		}));
 	}
 
 	resolveProvider(providerName: string): ProviderConfig {

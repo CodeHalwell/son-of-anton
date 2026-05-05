@@ -146,9 +146,9 @@ export function createServer() {
 			const error = err as Error;
 			console.error('Request failed:', error.message);
 
-			// Attempt fallback
+			// Walk the fallback chain in priority order until one succeeds.
 			try {
-				const matchedRoute = router.getConfig().routes
+				const matchedRoute = [...router.getConfig().routes]
 					.sort((a, b) => a.priority - b.priority)
 					.find(r => {
 						const matchRole = r.match.agentRole === '*' || r.match.agentRole === context.agentRole;
@@ -156,44 +156,50 @@ export function createServer() {
 						return matchRole && matchTask;
 					});
 
-				if (matchedRoute?.fallback) {
-					const fallbackConfig = router.resolveProvider(matchedRoute.fallback.provider);
-					const fallbackModel = matchedRoute.fallback.model;
-					const messages = req.body.messages ?? [];
-					const systemPrompt = req.body.system;
-					const maxTokens = req.body.max_tokens ?? 4096;
+				const fallbackChain = matchedRoute ? router.resolveFallbackChain(matchedRoute) : [];
 
-					let translatedBody: unknown;
-					if (fallbackConfig.format === 'anthropic') {
-						translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, fallbackModel);
-					} else {
-						translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, fallbackModel);
-					}
+				for (const fallback of fallbackChain) {
+					try {
+						const { providerConfig: fallbackConfig, provider: fallbackProvider, model: fallbackModel } = fallback;
+						const messages = req.body.messages ?? [];
+						const systemPrompt = req.body.system;
+						const maxTokens = req.body.max_tokens ?? 4096;
 
-					const headers: Record<string, string> = {
-						'Content-Type': 'application/json',
-					};
-
-					if (fallbackConfig.apiKey) {
+						let translatedBody: unknown;
 						if (fallbackConfig.format === 'anthropic') {
-							headers['x-api-key'] = fallbackConfig.apiKey;
-							headers['anthropic-version'] = '2023-06-01';
+							translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, fallbackModel);
 						} else {
-							headers['Authorization'] = `Bearer ${fallbackConfig.apiKey}`;
+							translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, fallbackModel);
 						}
-					}
 
-					const endpoint = fallbackConfig.format === 'anthropic'
-						? `${fallbackConfig.baseUrl}/v1/messages`
-						: `${fallbackConfig.baseUrl}/v1/chat/completions`;
+						const fallbackHeaders: Record<string, string> = {
+							'Content-Type': 'application/json',
+						};
 
-					const fallbackResponse = await fetch(endpoint, {
-						method: 'POST',
-						headers,
-						body: JSON.stringify(translatedBody),
-					});
+						if (fallbackConfig.apiKey) {
+							if (fallbackConfig.format === 'anthropic') {
+								fallbackHeaders['x-api-key'] = fallbackConfig.apiKey;
+								fallbackHeaders['anthropic-version'] = '2023-06-01';
+							} else {
+								fallbackHeaders['Authorization'] = `Bearer ${fallbackConfig.apiKey}`;
+							}
+						}
 
-					if (fallbackResponse.ok) {
+						const endpoint = fallbackConfig.format === 'anthropic'
+							? `${fallbackConfig.baseUrl}/v1/messages`
+							: `${fallbackConfig.baseUrl}/v1/chat/completions`;
+
+						const fallbackResponse = await fetch(endpoint, {
+							method: 'POST',
+							headers: fallbackHeaders,
+							body: JSON.stringify(translatedBody),
+						});
+
+						if (!fallbackResponse.ok) {
+							console.warn(`Fallback ${fallbackProvider} returned ${fallbackResponse.status}; trying next`);
+							continue;
+						}
+
 						const responseBody = await fallbackResponse.json() as Record<string, unknown>;
 						const unified = fallbackConfig.format === 'anthropic'
 							? fromAnthropicResponse(responseBody)
@@ -205,7 +211,7 @@ export function createServer() {
 						metrics.record({
 							id: randomUUID(),
 							timestamp: Date.now(),
-							provider: matchedRoute.fallback.provider,
+							provider: fallbackProvider,
 							model: fallbackModel,
 							agentRole: context.agentRole,
 							taskType: context.taskType ?? '',
@@ -220,10 +226,12 @@ export function createServer() {
 
 						res.json(unified);
 						return;
+					} catch (chainErr) {
+						console.warn(`Fallback chain entry failed: ${(chainErr as Error).message}; trying next`);
 					}
 				}
 			} catch (fallbackErr) {
-				console.error('Fallback also failed:', (fallbackErr as Error).message);
+				console.error('Fallback chain resolution failed:', (fallbackErr as Error).message);
 			}
 
 			const latencyMs = Date.now() - startTime;
