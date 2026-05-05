@@ -5,7 +5,6 @@ import express from 'express';
 import { readFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { IncomingMessage } from 'node:http';
 import type { ModelRoutesConfig, ProviderConfig, RoutingContext } from './types.js';
 import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
@@ -115,7 +114,7 @@ function buildEndpoint(config: ProviderConfig): string {
 
 export function createServer() {
 	const config = loadConfig();
-	const failoverConfig = loadFailoverConfig();
+	let failoverConfig = loadFailoverConfig();
 	const router = new ModelRouter(config);
 	const metrics = new MetricsCollector();
 	const app = express();
@@ -179,29 +178,32 @@ export function createServer() {
 				}
 
 				if (isStreaming) {
-					res.setHeader('Content-Type', 'text/event-stream');
-					res.setHeader('Cache-Control', 'no-cache');
-					res.setHeader('Connection', 'keep-alive');
-
-					const body = fetchResponse.body as unknown as IncomingMessage | null;
-					if (body) {
-						body.on('data', (chunk: Buffer) => {
-							res.write(chunk);
-						});
-						body.on('end', () => {
-							res.end();
-						});
-						body.on('error', (err: Error) => {
-							console.error('Stream error:', err);
-							res.end();
-						});
-					} else {
-						res.end();
+					if (!res.headersSent) {
+						res.setHeader('Content-Type', 'text/event-stream');
+						res.setHeader('Cache-Control', 'no-cache');
+						res.setHeader('Connection', 'keep-alive');
 					}
-					// NOTE: mid-stream failover for the SSE pipe path is deferred to the
-					// adapter-registry task.  Once ProviderAdapters are wired into server.ts,
-					// FailoverChain.send() will handle mid-stream connection resets cleanly.
-					return;
+
+					try {
+						const body = fetchResponse.body as unknown as AsyncIterable<Buffer> | null;
+						if (body) {
+							for await (const chunk of body) {
+								res.write(chunk);
+							}
+						}
+						res.end();
+						return;
+					} catch (streamErr) {
+						lastError = streamErr as Error;
+						console.error(`Stream from ${provider} failed mid-flight:`, lastError.message);
+						// Continue to next provider if headers have not been sent yet,
+						// or if the connection is still writable.
+						if (res.headersSent && !res.writableEnded) {
+							continue;
+						}
+						// Response already ended — cannot recover.
+						return;
+					}
 				}
 
 				// Non-streaming response
@@ -234,7 +236,23 @@ export function createServer() {
 
 			} catch (err) {
 				lastError = err as Error;
-				console.error(`Provider ${provider} failed:`, (err as Error).message);
+				console.error(`Provider ${provider} failed:`, lastError.message);
+				metrics.record({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					provider,
+					model,
+					agentRole: context.agentRole,
+					taskType: context.taskType ?? '',
+					taskId: context.taskId ?? '',
+					inputTokens: 0,
+					outputTokens: 0,
+					cachedTokens: 0,
+					latencyMs: Date.now() - startTime,
+					cost: 0,
+					success: false,
+					error: lastError.message,
+				});
 				// Network / connection error — try next provider
 			}
 		}
@@ -278,6 +296,7 @@ export function createServer() {
 		try {
 			const newConfig = loadConfig();
 			router.reloadConfig(newConfig);
+			failoverConfig = loadFailoverConfig();
 			res.json({ status: 'reloaded' });
 		} catch (err) {
 			res.status(500).json({ error: (err as Error).message });
