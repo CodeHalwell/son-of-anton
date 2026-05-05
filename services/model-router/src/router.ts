@@ -1,15 +1,9 @@
 // Copyright (c) Son-Of-Anton. All rights reserved.
 // Licensed under the MIT License.
 
-import type { FallbackEntry, ModelRoutesConfig, ProviderConfig, RouteConfig, RoutingContext, SplitConfig } from './types.js';
+import type { FallbackTarget, ModelRoutesConfig, ProviderConfig, RouteConfig, RoutingContext, SplitConfig } from './types.js';
 
 export interface ResolvedRoute {
-	provider: string;
-	model: string;
-	providerConfig: ProviderConfig;
-}
-
-export interface ResolvedFallback {
 	provider: string;
 	model: string;
 	providerConfig: ProviderConfig;
@@ -35,18 +29,21 @@ export class ModelRouter {
 	}
 
 	/**
-	 * Returns the ordered list of resolved fallback entries for a given route.
-	 * Returns an empty array when no fallback chain is configured.
+	 * Returns the primary candidate followed by every fallback for a given
+	 * routing context.  Callers use this to build a FailoverExecutor chain.
 	 */
-	resolveFallbackChain(route: RouteConfig): ResolvedFallback[] {
-		if (!route.fallback || route.fallback.length === 0) {
-			return [];
+	resolveFallbackChain(context: RoutingContext): FallbackTarget[] {
+		const sortedRoutes = [...this.config.routes].sort((a, b) => a.priority - b.priority);
+
+		for (const route of sortedRoutes) {
+			if (this.matchesRoute(route, context)) {
+				const primary = this.resolvePrimaryTarget(route);
+				const fallbacks = route.fallbacks ?? (route.fallback ? [route.fallback] : []);
+				return [primary, ...fallbacks];
+			}
 		}
-		return route.fallback.map((fb: FallbackEntry) => ({
-			provider: fb.provider,
-			model: fb.model,
-			providerConfig: this.resolveProvider(fb.provider),
-		}));
+
+		throw new Error(`No matching route found for agentRole="${context.agentRole}" taskType="${context.taskType ?? ''}"`);
 	}
 
 	resolveProvider(providerName: string): ProviderConfig {
@@ -101,24 +98,25 @@ export class ModelRouter {
 	}
 
 	private buildResolvedRoute(route: RouteConfig): ResolvedRoute {
+		const target = this.resolvePrimaryTarget(route);
+		return {
+			provider: target.provider,
+			model: target.model,
+			providerConfig: this.resolveProvider(target.provider),
+		};
+	}
+
+	private resolvePrimaryTarget(route: RouteConfig): { provider: string; model: string } {
 		if (route.split && route.split.length > 0) {
 			const selected = this.weightedRandom(route.split);
-			return {
-				provider: selected.provider,
-				model: selected.model,
-				providerConfig: this.resolveProvider(selected.provider),
-			};
+			return { provider: selected.provider, model: selected.model };
 		}
 
 		if (!route.provider || !route.model) {
 			throw new Error(`Route "${route.name}" has no provider/model and no split config`);
 		}
 
-		return {
-			provider: route.provider,
-			model: route.model,
-			providerConfig: this.resolveProvider(route.provider),
-		};
+		return { provider: route.provider, model: route.model };
 	}
 
 	private weightedRandom(splits: SplitConfig[]): SplitConfig {

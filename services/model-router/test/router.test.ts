@@ -30,7 +30,7 @@ const testConfig: ModelRoutesConfig = {
 			provider: 'ollama',
 			model: 'codellama:13b',
 			priority: 3,
-			fallback: [{ provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }],
+			fallback: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
 		},
 		{
 			name: 'exploration',
@@ -141,9 +141,9 @@ describe('ModelRouter', () => {
 
 	test('resolves fallback configuration', () => {
 		const route = testConfig.routes.find(r => r.name === 'fast-completion');
-		assert.ok(route?.fallback && route.fallback.length > 0);
-		assert.strictEqual(route.fallback[0].provider, 'anthropic');
-		assert.strictEqual(route.fallback[0].model, 'claude-haiku-4-5-20251001');
+		assert.ok(route?.fallback);
+		assert.strictEqual(route.fallback.provider, 'anthropic');
+		assert.strictEqual(route.fallback.model, 'claude-haiku-4-5-20251001');
 	});
 
 	test('split/weighted routing distributes across providers', () => {

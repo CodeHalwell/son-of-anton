@@ -5,7 +5,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { isFailoverError, withFailover } from '../src/failover.js';
 import type { FailoverEntry } from '../src/failover.js';
+import { ModelRouter } from '../src/router.js';
 import type { AgentEvent, ModelDescriptor, ProviderAdapter, UniformRequest } from '../src/providers/types.js';
+import type { ModelRoutesConfig } from '../src/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,8 +26,7 @@ function neverAborted(): AbortSignal {
 	return new AbortController().signal;
 }
 
-/** Builds a ProviderAdapter that emits the given events then stops. */
-function adapterThatYields(events: AgentEvent[], model = 'model-a'): ProviderAdapter {
+function adapterThatYields(events: AgentEvent[]): ProviderAdapter {
 	return {
 		id: 'fake',
 		displayName: 'Fake',
@@ -39,7 +40,6 @@ function adapterThatYields(events: AgentEvent[], model = 'model-a'): ProviderAda
 	};
 }
 
-/** Builds a ProviderAdapter that throws immediately. */
 function adapterThatThrows(err: Error): ProviderAdapter {
 	return {
 		id: 'failing',
@@ -178,7 +178,7 @@ describe('withFailover', () => {
 		assert.deepStrictEqual(events, successEvents);
 	});
 
-	test('does NOT fail over on non-failover error (last adapter surfaces the error)', async () => {
+	test('does NOT fail over on non-failover error; surfaces error events', async () => {
 		const authErr = new Error('returned 401: unauthorized');
 		const entries: FailoverEntry[] = [
 			{ adapter: adapterThatThrows(authErr), model: 'model-a' },
@@ -209,7 +209,7 @@ describe('withFailover', () => {
 		assert.deepStrictEqual(events, successEvents);
 	});
 
-	test('all providers fail: surfaces last error', async () => {
+	test('all providers fail: surfaces last error code', async () => {
 		const err5xx = new Error('returned 503: unavailable');
 		const errConn = Object.assign(new Error('reset'), { code: 'ECONNRESET' });
 		const entries: FailoverEntry[] = [
@@ -218,7 +218,6 @@ describe('withFailover', () => {
 		];
 
 		const events = await collect(withFailover(entries, makeRequest(), neverAborted()));
-		// Last error is ECONNRESET — code exposed
 		assert.strictEqual(events[0].type, 'error');
 		const errorEvent = events[0] as Extract<AgentEvent, { type: 'error' }>;
 		assert.strictEqual(errorEvent.code, 'ECONNRESET');
@@ -256,7 +255,6 @@ describe('withFailover', () => {
 		];
 
 		const events = await collect(withFailover(entries, makeRequest(), neverAborted()));
-		// Sees events from both providers: primary's partial output then fallback's response
 		assert.deepStrictEqual(events, [...primaryEvents, ...fallbackEvents]);
 	});
 
@@ -269,11 +267,10 @@ describe('withFailover', () => {
 		];
 
 		const events = await collect(withFailover(entries, makeRequest(), neverAborted()));
-		// Last adapter: retryable error is surfaced as-is (no more fallbacks)
 		assert.deepStrictEqual(events, primaryEvents);
 	});
 
-	test('stops immediately after message_stop; does not consume further events', async () => {
+	test('stops after message_stop; does not consume subsequent adapters', async () => {
 		const primaryEvents: AgentEvent[] = [
 			{ type: 'text_delta', text: 'done' },
 			{ type: 'message_stop', stopReason: 'end_turn' },
@@ -289,59 +286,128 @@ describe('withFailover', () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveFallbackChain via ModelRouter
+// ModelRouter.resolveFallbackChain
 // ---------------------------------------------------------------------------
 
+const chainConfig: ModelRoutesConfig = {
+	routes: [
+		{
+			name: 'with-fallbacks-array',
+			match: { agentRole: 'orchestrator' },
+			provider: 'anthropic-oauth',
+			model: 'claude-opus-4-7',
+			priority: 1,
+			fallbacks: [
+				{ provider: 'copilot', model: 'claude-opus' },
+				{ provider: 'anthropic', model: 'claude-opus-4-7' },
+			],
+		},
+		{
+			name: 'with-single-fallback',
+			match: { agentRole: 'coder' },
+			provider: 'copilot',
+			model: 'claude-sonnet',
+			priority: 2,
+			fallback: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+		},
+		{
+			name: 'no-fallback',
+			match: { agentRole: 'explorer' },
+			provider: 'anthropic',
+			model: 'claude-haiku-4-5-20251001',
+			priority: 3,
+		},
+		{
+			name: 'both-fallback-and-fallbacks',
+			match: { agentRole: 'tester' },
+			provider: 'anthropic',
+			model: 'claude-sonnet-4-6',
+			priority: 4,
+			fallback: { provider: 'legacy', model: 'lm' },
+			fallbacks: [
+				{ provider: 'new1', model: 'nm1' },
+				{ provider: 'new2', model: 'nm2' },
+			],
+		},
+		{
+			name: 'catch-all',
+			match: { agentRole: '*' },
+			provider: 'anthropic',
+			model: 'claude-sonnet-4-6',
+			priority: 100,
+		},
+	],
+	providers: {
+		'anthropic-oauth': { baseUrl: 'https://api.anthropic.com', format: 'anthropic' },
+		'copilot': { baseUrl: 'https://api.githubcopilot.com', format: 'openai' },
+		'anthropic': { baseUrl: 'https://api.anthropic.com', format: 'anthropic' },
+		'new1': { baseUrl: 'http://new1', format: 'openai' },
+		'new2': { baseUrl: 'http://new2', format: 'openai' },
+	},
+};
+
 describe('ModelRouter.resolveFallbackChain', () => {
-	// Import inline to avoid re-reading files above
-	test('returns empty array when no fallback configured', async () => {
-		const { ModelRouter } = await import('../src/router.js');
-		const router = new ModelRouter({
+	const router = new ModelRouter(chainConfig);
+
+	test('returns primary + fallbacks when fallbacks array is set', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'orchestrator' });
+		assert.deepStrictEqual(chain, [
+			{ provider: 'anthropic-oauth', model: 'claude-opus-4-7' },
+			{ provider: 'copilot', model: 'claude-opus' },
+			{ provider: 'anthropic', model: 'claude-opus-4-7' },
+		]);
+	});
+
+	test('wraps single fallback field in array for backward compat', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'coder' });
+		assert.deepStrictEqual(chain, [
+			{ provider: 'copilot', model: 'claude-sonnet' },
+			{ provider: 'anthropic', model: 'claude-sonnet-4-6' },
+		]);
+	});
+
+	test('returns single-element chain when no fallback is configured', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'explorer' });
+		assert.deepStrictEqual(chain, [
+			{ provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+		]);
+	});
+
+	test('fallbacks array takes precedence over fallback when both are present', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'tester' });
+		assert.deepStrictEqual(chain, [
+			{ provider: 'anthropic', model: 'claude-sonnet-4-6' },
+			{ provider: 'new1', model: 'nm1' },
+			{ provider: 'new2', model: 'nm2' },
+		]);
+	});
+
+	test('matches catch-all role when no specific role matches', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'unknown' });
+		assert.deepStrictEqual(chain, [
+			{ provider: 'anthropic', model: 'claude-sonnet-4-6' },
+		]);
+	});
+
+	test('throws when no route matches and no wildcard', () => {
+		const strict = new ModelRouter({
 			routes: [{
-				name: 'r1',
-				match: { agentRole: '*' },
+				name: 'only-coder',
+				match: { agentRole: 'coder' },
 				provider: 'anthropic',
 				model: 'claude-sonnet-4-6',
 				priority: 1,
 			}],
-			providers: {
-				anthropic: { baseUrl: 'https://api.anthropic.com', apiKey: 'test', format: 'anthropic' },
-			},
+			providers: { anthropic: { baseUrl: 'https://api.anthropic.com', format: 'anthropic' } },
 		});
-		const route = router.getConfig().routes[0];
-		assert.deepStrictEqual(router.resolveFallbackChain(route), []);
+		assert.throws(
+			() => strict.resolveFallbackChain({ agentRole: 'explorer' }),
+			/No matching route found/,
+		);
 	});
 
-	test('resolves chain of two fallbacks in order', async () => {
-		const { ModelRouter } = await import('../src/router.js');
-		const router = new ModelRouter({
-			routes: [{
-				name: 'r1',
-				match: { agentRole: 'orchestrator' },
-				provider: 'primary',
-				model: 'model-p',
-				priority: 1,
-				fallback: [
-					{ provider: 'fallback-a', model: 'model-a' },
-					{ provider: 'fallback-b', model: 'model-b' },
-				],
-			}],
-			providers: {
-				primary: { baseUrl: 'https://primary.example.com', format: 'anthropic' },
-				'fallback-a': { baseUrl: 'https://fa.example.com', format: 'openai' },
-				'fallback-b': { baseUrl: 'https://fb.example.com', format: 'anthropic' },
-			},
-		});
-		const route = router.getConfig().routes[0];
-		const chain = router.resolveFallbackChain(route);
-		assert.strictEqual(chain.length, 2);
-		assert.strictEqual(chain[0].provider, 'fallback-a');
-		assert.strictEqual(chain[0].model, 'model-a');
-		assert.strictEqual(chain[0].providerConfig.baseUrl, 'https://fa.example.com');
-		assert.strictEqual(chain[0].providerConfig.format, 'openai');
-		assert.strictEqual(chain[1].provider, 'fallback-b');
-		assert.strictEqual(chain[1].model, 'model-b');
-		assert.strictEqual(chain[1].providerConfig.baseUrl, 'https://fb.example.com');
-		assert.strictEqual(chain[1].providerConfig.format, 'anthropic');
+	test('respects priority ordering — lower number matches first', () => {
+		const chain = router.resolveFallbackChain({ agentRole: 'orchestrator', taskType: 'planning' });
+		assert.strictEqual(chain[0].provider, 'anthropic-oauth');
 	});
 });
