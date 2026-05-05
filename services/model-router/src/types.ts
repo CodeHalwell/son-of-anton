@@ -1,7 +1,7 @@
 // Copyright (c) Son-Of-Anton. All rights reserved.
 // Licensed under the MIT License.
 
-export interface FallbackEntry {
+export interface FallbackTarget {
 	provider: string;
 	model: string;
 }
@@ -12,15 +12,11 @@ export interface RouteConfig {
 	provider?: string;
 	model?: string;
 	priority: number;
-	/** Single fallback (legacy) or ordered fallback chain (§10.1). */
-	fallback?: FallbackEntry | FallbackEntry[];
+	/** Single fallback — kept for backward compatibility. `fallbacks` takes precedence when both are set. */
+	fallback?: FallbackTarget;
+	/** Ordered failover chain tried in sequence after the primary fails. */
+	fallbacks?: FallbackTarget[];
 	split?: SplitConfig[];
-}
-
-/** Normalises `fallback` to an always-present array, regardless of format. */
-export function normaliseFallbacks(fallback: RouteConfig['fallback']): FallbackEntry[] {
-	if (!fallback) return [];
-	return Array.isArray(fallback) ? fallback : [fallback];
 }
 
 export interface RouteMatch {

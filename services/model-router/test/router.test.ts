@@ -4,7 +4,6 @@
 import { describe, test, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import type { ModelRoutesConfig, RequestMetrics } from '../src/types.js';
-import { normaliseFallbacks } from '../src/types.js';
 import { ModelRouter } from '../src/router.js';
 import { MetricsCollector, calculateCost, PRICING } from '../src/metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from '../src/translators.js';
@@ -143,9 +142,8 @@ describe('ModelRouter', () => {
 	test('resolves fallback configuration', () => {
 		const route = testConfig.routes.find(r => r.name === 'fast-completion');
 		assert.ok(route?.fallback);
-		const [first] = normaliseFallbacks(route.fallback);
-		assert.strictEqual(first.provider, 'anthropic');
-		assert.strictEqual(first.model, 'claude-haiku-4-5-20251001');
+		assert.strictEqual(route.fallback.provider, 'anthropic');
+		assert.strictEqual(route.fallback.model, 'claude-haiku-4-5-20251001');
 	});
 
 	test('split/weighted routing distributes across providers', () => {
