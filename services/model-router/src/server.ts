@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { ModelRoutesConfig, RoutingContext } from './types.js';
+import { normaliseFallbacks } from './types.js';
 import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
@@ -146,7 +147,7 @@ export function createServer() {
 			const error = err as Error;
 			console.error('Request failed:', error.message);
 
-			// Attempt fallback
+			// Attempt fallback chain (§10.1): try each entry in order.
 			try {
 				const matchedRoute = router.getConfig().routes
 					.sort((a, b) => a.priority - b.priority)
@@ -156,74 +157,80 @@ export function createServer() {
 						return matchRole && matchTask;
 					});
 
-				if (matchedRoute?.fallback) {
-					const fallbackConfig = router.resolveProvider(matchedRoute.fallback.provider);
-					const fallbackModel = matchedRoute.fallback.model;
-					const messages = req.body.messages ?? [];
-					const systemPrompt = req.body.system;
-					const maxTokens = req.body.max_tokens ?? 4096;
+				const fallbackChain = normaliseFallbacks(matchedRoute?.fallback);
 
-					let translatedBody: unknown;
-					if (fallbackConfig.format === 'anthropic') {
-						translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, fallbackModel);
-					} else {
-						translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, fallbackModel);
-					}
+				for (const fallbackEntry of fallbackChain) {
+					try {
+						const fallbackConfig = router.resolveProvider(fallbackEntry.provider);
+						const fallbackModel = fallbackEntry.model;
+						const messages = req.body.messages ?? [];
+						const systemPrompt = req.body.system;
+						const maxTokens = req.body.max_tokens ?? 4096;
 
-					const headers: Record<string, string> = {
-						'Content-Type': 'application/json',
-					};
-
-					if (fallbackConfig.apiKey) {
+						let translatedBody: unknown;
 						if (fallbackConfig.format === 'anthropic') {
-							headers['x-api-key'] = fallbackConfig.apiKey;
-							headers['anthropic-version'] = '2023-06-01';
+							translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, fallbackModel);
 						} else {
-							headers['Authorization'] = `Bearer ${fallbackConfig.apiKey}`;
+							translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, fallbackModel);
 						}
-					}
 
-					const endpoint = fallbackConfig.format === 'anthropic'
-						? `${fallbackConfig.baseUrl}/v1/messages`
-						: `${fallbackConfig.baseUrl}/v1/chat/completions`;
+						const headers: Record<string, string> = {
+							'Content-Type': 'application/json',
+						};
 
-					const fallbackResponse = await fetch(endpoint, {
-						method: 'POST',
-						headers,
-						body: JSON.stringify(translatedBody),
-					});
+						if (fallbackConfig.apiKey) {
+							if (fallbackConfig.format === 'anthropic') {
+								headers['x-api-key'] = fallbackConfig.apiKey;
+								headers['anthropic-version'] = '2023-06-01';
+							} else {
+								headers['Authorization'] = `Bearer ${fallbackConfig.apiKey}`;
+							}
+						}
 
-					if (fallbackResponse.ok) {
-						const responseBody = await fallbackResponse.json() as Record<string, unknown>;
-						const unified = fallbackConfig.format === 'anthropic'
-							? fromAnthropicResponse(responseBody)
-							: fromOpenAIResponse(responseBody);
+						const endpoint = fallbackConfig.format === 'anthropic'
+							? `${fallbackConfig.baseUrl}/v1/messages`
+							: `${fallbackConfig.baseUrl}/v1/chat/completions`;
 
-						const latencyMs = Date.now() - startTime;
-						const cost = calculateCost(fallbackModel, unified.inputTokens, unified.outputTokens, unified.cachedTokens);
-
-						metrics.record({
-							id: randomUUID(),
-							timestamp: Date.now(),
-							provider: matchedRoute.fallback.provider,
-							model: fallbackModel,
-							agentRole: context.agentRole,
-							taskType: context.taskType ?? '',
-							taskId: context.taskId ?? '',
-							inputTokens: unified.inputTokens,
-							outputTokens: unified.outputTokens,
-							cachedTokens: unified.cachedTokens,
-							latencyMs,
-							cost,
-							success: true,
+						const fallbackResponse = await fetch(endpoint, {
+							method: 'POST',
+							headers,
+							body: JSON.stringify(translatedBody),
 						});
 
-						res.json(unified);
-						return;
+						if (fallbackResponse.ok) {
+							const responseBody = await fallbackResponse.json() as Record<string, unknown>;
+							const unified = fallbackConfig.format === 'anthropic'
+								? fromAnthropicResponse(responseBody)
+								: fromOpenAIResponse(responseBody);
+
+							const latencyMs = Date.now() - startTime;
+							const cost = calculateCost(fallbackModel, unified.inputTokens, unified.outputTokens, unified.cachedTokens);
+
+							metrics.record({
+								id: randomUUID(),
+								timestamp: Date.now(),
+								provider: fallbackEntry.provider,
+								model: fallbackModel,
+								agentRole: context.agentRole,
+								taskType: context.taskType ?? '',
+								taskId: context.taskId ?? '',
+								inputTokens: unified.inputTokens,
+								outputTokens: unified.outputTokens,
+								cachedTokens: unified.cachedTokens,
+								latencyMs,
+								cost,
+								success: true,
+							});
+
+							res.json(unified);
+							return;
+						}
+					} catch (entryErr) {
+						console.error(`Fallback to ${fallbackEntry.provider} failed:`, (entryErr as Error).message);
 					}
 				}
 			} catch (fallbackErr) {
-				console.error('Fallback also failed:', (fallbackErr as Error).message);
+				console.error('Fallback chain error:', (fallbackErr as Error).message);
 			}
 
 			const latencyMs = Date.now() - startTime;

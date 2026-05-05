@@ -1,14 +1,26 @@
 // Copyright (c) Son-Of-Anton. All rights reserved.
 // Licensed under the MIT License.
 
+export interface FallbackEntry {
+	provider: string;
+	model: string;
+}
+
 export interface RouteConfig {
 	name: string;
 	match: RouteMatch;
 	provider?: string;
 	model?: string;
 	priority: number;
-	fallback?: { provider: string; model: string };
+	/** Single fallback (legacy) or ordered fallback chain (§10.1). */
+	fallback?: FallbackEntry | FallbackEntry[];
 	split?: SplitConfig[];
+}
+
+/** Normalises `fallback` to an always-present array, regardless of format. */
+export function normaliseFallbacks(fallback: RouteConfig['fallback']): FallbackEntry[] {
+	if (!fallback) return [];
+	return Array.isArray(fallback) ? fallback : [fallback];
 }
 
 export interface RouteMatch {
