@@ -2,13 +2,15 @@
 // Licensed under the MIT License.
 
 import express from 'express';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { IncomingMessage } from 'node:http';
-import type { ModelRoutesConfig, RoutingContext } from './types.js';
+import type { ModelRoutesConfig, ProviderConfig, RoutingContext } from './types.js';
 import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
+import type { FailoverConfig } from './failover/types.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -18,8 +20,92 @@ function loadConfig(): ModelRoutesConfig {
 	return JSON.parse(raw) as ModelRoutesConfig;
 }
 
+function loadFailoverConfig(): FailoverConfig {
+	const candidates = [
+		process.env.MODEL_FAILOVER_CONFIG,
+		join(process.cwd(), '.son-of-anton', 'routing.json'),
+		join(process.cwd(), '..', '..', '.son-of-anton', 'routing.json'),
+	].filter((p): p is string => typeof p === 'string');
+
+	for (const path of candidates) {
+		if (existsSync(path)) {
+			try {
+				return JSON.parse(readFileSync(path, 'utf-8')) as FailoverConfig;
+			} catch {
+				// corrupt file — continue to next candidate
+			}
+		}
+	}
+	return {};
+}
+
+interface ResolvedProvider {
+	provider: string;
+	model: string;
+	config: ProviderConfig;
+}
+
+/**
+ * Builds the ordered list of providers to try for a given agent role.
+ *
+ * Primary source: `routing.json` failover chain for the role (or "*" catch-all).
+ * Fallback: the single route resolved by ModelRouter (legacy API-key path).
+ *
+ * Entries in routing.json that reference providers not present in
+ * model-routes.json are silently skipped — this allows routing.json to
+ * include future OAuth provider IDs before the adapter registry is wired in.
+ */
+function resolveProvidersForRole(
+	agentRole: string,
+	context: RoutingContext,
+	router: ModelRouter,
+	failoverConfig: FailoverConfig,
+): ResolvedProvider[] {
+	const roleConfig = failoverConfig[agentRole] ?? failoverConfig['*'];
+
+	if (roleConfig) {
+		const entries = [roleConfig.primary, ...roleConfig.fallback];
+		const resolved: ResolvedProvider[] = [];
+		for (const entry of entries) {
+			try {
+				const config = router.resolveProvider(entry.provider);
+				resolved.push({ provider: entry.provider, model: entry.model, config });
+			} catch {
+				// Provider not yet registered in model-routes.json — skip gracefully.
+			}
+		}
+		if (resolved.length > 0) {
+			return resolved;
+		}
+	}
+
+	// Legacy fallback: use ModelRouter to resolve the primary route.
+	const route = router.resolveRoute(context);
+	return [{ provider: route.provider, model: route.model, config: route.providerConfig }];
+}
+
+function buildRequestHeaders(config: ProviderConfig): Record<string, string> {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+	if (config.apiKey) {
+		if (config.format === 'anthropic') {
+			headers['x-api-key'] = config.apiKey;
+			headers['anthropic-version'] = '2023-06-01';
+		} else {
+			headers['Authorization'] = `Bearer ${config.apiKey}`;
+		}
+	}
+	return headers;
+}
+
+function buildEndpoint(config: ProviderConfig): string {
+	return config.format === 'anthropic'
+		? `${config.baseUrl}/v1/messages`
+		: `${config.baseUrl}/v1/chat/completions`;
+}
+
 export function createServer() {
 	const config = loadConfig();
+	const failoverConfig = loadFailoverConfig();
 	const router = new ModelRouter(config);
 	const metrics = new MetricsCollector();
 	const app = express();
@@ -41,211 +127,121 @@ export function createServer() {
 
 		const isStreaming = req.body.stream === true;
 		const startTime = Date.now();
+		const messages = req.body.messages ?? [];
+		const systemPrompt = req.body.system;
+		const maxTokens = req.body.max_tokens ?? 4096;
 
-		let resolvedProvider: string;
-		let resolvedModel: string;
+		const providers = resolveProvidersForRole(context.agentRole, context, router, failoverConfig);
 
-		try {
-			const route = router.resolveRoute(context);
-			resolvedProvider = route.provider;
-			resolvedModel = route.model;
+		let lastError: Error | null = null;
 
-			const providerConfig = route.providerConfig;
-			const messages = req.body.messages ?? [];
-			const systemPrompt = req.body.system;
-			const maxTokens = req.body.max_tokens ?? 4096;
-
-			// Translate request to provider format
-			let translatedBody: unknown;
-			if (providerConfig.format === 'anthropic') {
-				translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, resolvedModel, isStreaming);
-			} else {
-				translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, resolvedModel, isStreaming);
-			}
-
-			// Build fetch options
-			const headers: Record<string, string> = {
-				'Content-Type': 'application/json',
-			};
-
-			if (providerConfig.apiKey) {
-				if (providerConfig.format === 'anthropic') {
-					headers['x-api-key'] = providerConfig.apiKey;
-					headers['anthropic-version'] = '2023-06-01';
-				} else {
-					headers['Authorization'] = `Bearer ${providerConfig.apiKey}`;
-				}
-			}
-
-			const endpoint = providerConfig.format === 'anthropic'
-				? `${providerConfig.baseUrl}/v1/messages`
-				: `${providerConfig.baseUrl}/v1/chat/completions`;
-
-			const fetchResponse = await fetch(endpoint, {
-				method: 'POST',
-				headers,
-				body: JSON.stringify(translatedBody),
-			});
-
-			if (!fetchResponse.ok) {
-				const errorBody = await fetchResponse.text();
-				throw new Error(`Provider ${resolvedProvider} returned ${fetchResponse.status}: ${errorBody}`);
-			}
-
-			// Handle streaming
-			if (isStreaming) {
-				res.setHeader('Content-Type', 'text/event-stream');
-				res.setHeader('Cache-Control', 'no-cache');
-				res.setHeader('Connection', 'keep-alive');
-
-				const body = fetchResponse.body as unknown as IncomingMessage | null;
-				if (body) {
-					body.on('data', (chunk: Buffer) => {
-						res.write(chunk);
-					});
-					body.on('end', () => {
-						res.end();
-					});
-					body.on('error', (err: Error) => {
-						console.error('Stream error:', err);
-						res.end();
-					});
-				} else {
-					res.end();
-				}
-				return;
-			}
-
-			// Handle non-streaming response
-			const responseBody = await fetchResponse.json() as Record<string, unknown>;
-			const unified = providerConfig.format === 'anthropic'
-				? fromAnthropicResponse(responseBody)
-				: fromOpenAIResponse(responseBody);
-
-			const latencyMs = Date.now() - startTime;
-			const cost = calculateCost(resolvedModel, unified.inputTokens, unified.outputTokens, unified.cachedTokens);
-
-			metrics.record({
-				id: randomUUID(),
-				timestamp: Date.now(),
-				provider: resolvedProvider,
-				model: resolvedModel,
-				agentRole: context.agentRole,
-				taskType: context.taskType ?? '',
-				taskId: context.taskId ?? '',
-				inputTokens: unified.inputTokens,
-				outputTokens: unified.outputTokens,
-				cachedTokens: unified.cachedTokens,
-				latencyMs,
-				cost,
-				success: true,
-			});
-
-			res.json(unified);
-		} catch (err) {
-			const error = err as Error;
-			console.error('Request failed:', error.message);
-
-			// Attempt fallback
+		for (const { provider, model, config: providerConfig } of providers) {
 			try {
-				const matchedRoute = router.getConfig().routes
-					.sort((a, b) => a.priority - b.priority)
-					.find(r => {
-						const matchRole = r.match.agentRole === '*' || r.match.agentRole === context.agentRole;
-						const matchTask = !r.match.taskType || r.match.taskType === context.taskType;
-						return matchRole && matchTask;
-					});
+				const translatedBody = providerConfig.format === 'anthropic'
+					? toAnthropicFormat(messages, systemPrompt, maxTokens, model, isStreaming)
+					: toOpenAIFormat(messages, systemPrompt, maxTokens, model, isStreaming);
 
-				if (matchedRoute?.fallback) {
-					const fallbackConfig = router.resolveProvider(matchedRoute.fallback.provider);
-					const fallbackModel = matchedRoute.fallback.model;
-					const messages = req.body.messages ?? [];
-					const systemPrompt = req.body.system;
-					const maxTokens = req.body.max_tokens ?? 4096;
+				const headers = buildRequestHeaders(providerConfig);
+				const endpoint = buildEndpoint(providerConfig);
 
-					let translatedBody: unknown;
-					if (fallbackConfig.format === 'anthropic') {
-						translatedBody = toAnthropicFormat(messages, systemPrompt, maxTokens, fallbackModel);
-					} else {
-						translatedBody = toOpenAIFormat(messages, systemPrompt, maxTokens, fallbackModel);
+				const fetchResponse = await fetch(endpoint, {
+					method: 'POST',
+					headers,
+					body: JSON.stringify(translatedBody),
+				});
+
+				if (!fetchResponse.ok) {
+					const errorBody = await fetchResponse.text();
+					const retryable = fetchResponse.status >= 500;
+					lastError = new Error(`Provider ${provider} returned ${fetchResponse.status}: ${errorBody}`);
+					if (!retryable) {
+						// Client error — do not try fallbacks
+						break;
 					}
-
-					const headers: Record<string, string> = {
-						'Content-Type': 'application/json',
-					};
-
-					if (fallbackConfig.apiKey) {
-						if (fallbackConfig.format === 'anthropic') {
-							headers['x-api-key'] = fallbackConfig.apiKey;
-							headers['anthropic-version'] = '2023-06-01';
-						} else {
-							headers['Authorization'] = `Bearer ${fallbackConfig.apiKey}`;
-						}
-					}
-
-					const endpoint = fallbackConfig.format === 'anthropic'
-						? `${fallbackConfig.baseUrl}/v1/messages`
-						: `${fallbackConfig.baseUrl}/v1/chat/completions`;
-
-					const fallbackResponse = await fetch(endpoint, {
-						method: 'POST',
-						headers,
-						body: JSON.stringify(translatedBody),
-					});
-
-					if (fallbackResponse.ok) {
-						const responseBody = await fallbackResponse.json() as Record<string, unknown>;
-						const unified = fallbackConfig.format === 'anthropic'
-							? fromAnthropicResponse(responseBody)
-							: fromOpenAIResponse(responseBody);
-
-						const latencyMs = Date.now() - startTime;
-						const cost = calculateCost(fallbackModel, unified.inputTokens, unified.outputTokens, unified.cachedTokens);
-
-						metrics.record({
-							id: randomUUID(),
-							timestamp: Date.now(),
-							provider: matchedRoute.fallback.provider,
-							model: fallbackModel,
-							agentRole: context.agentRole,
-							taskType: context.taskType ?? '',
-							taskId: context.taskId ?? '',
-							inputTokens: unified.inputTokens,
-							outputTokens: unified.outputTokens,
-							cachedTokens: unified.cachedTokens,
-							latencyMs,
-							cost,
-							success: true,
-						});
-
-						res.json(unified);
-						return;
-					}
+					// Server error — try next provider
+					continue;
 				}
-			} catch (fallbackErr) {
-				console.error('Fallback also failed:', (fallbackErr as Error).message);
+
+				if (isStreaming) {
+					res.setHeader('Content-Type', 'text/event-stream');
+					res.setHeader('Cache-Control', 'no-cache');
+					res.setHeader('Connection', 'keep-alive');
+
+					const body = fetchResponse.body as unknown as IncomingMessage | null;
+					if (body) {
+						body.on('data', (chunk: Buffer) => {
+							res.write(chunk);
+						});
+						body.on('end', () => {
+							res.end();
+						});
+						body.on('error', (err: Error) => {
+							console.error('Stream error:', err);
+							res.end();
+						});
+					} else {
+						res.end();
+					}
+					return;
+				}
+
+				// Non-streaming response
+				const responseBody = await fetchResponse.json() as Record<string, unknown>;
+				const unified = providerConfig.format === 'anthropic'
+					? fromAnthropicResponse(responseBody)
+					: fromOpenAIResponse(responseBody);
+
+				const latencyMs = Date.now() - startTime;
+				const cost = calculateCost(model, unified.inputTokens, unified.outputTokens, unified.cachedTokens);
+
+				metrics.record({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					provider,
+					model,
+					agentRole: context.agentRole,
+					taskType: context.taskType ?? '',
+					taskId: context.taskId ?? '',
+					inputTokens: unified.inputTokens,
+					outputTokens: unified.outputTokens,
+					cachedTokens: unified.cachedTokens,
+					latencyMs,
+					cost,
+					success: true,
+				});
+
+				res.json(unified);
+				return;
+
+			} catch (err) {
+				lastError = err as Error;
+				console.error(`Provider ${provider} failed:`, (err as Error).message);
+				// Network / connection error — try next provider
 			}
-
-			const latencyMs = Date.now() - startTime;
-			metrics.record({
-				id: randomUUID(),
-				timestamp: Date.now(),
-				provider: resolvedProvider! ?? 'unknown',
-				model: resolvedModel! ?? 'unknown',
-				agentRole: context.agentRole,
-				taskType: context.taskType ?? '',
-				taskId: context.taskId ?? '',
-				inputTokens: 0,
-				outputTokens: 0,
-				cachedTokens: 0,
-				latencyMs,
-				cost: 0,
-				success: false,
-				error: error.message,
-			});
-
-			res.status(502).json({ error: error.message });
 		}
+
+		// All providers exhausted
+		const latencyMs = Date.now() - startTime;
+		console.error('All providers failed. Last error:', lastError?.message);
+
+		metrics.record({
+			id: randomUUID(),
+			timestamp: Date.now(),
+			provider: providers[0]?.provider ?? 'unknown',
+			model: providers[0]?.model ?? 'unknown',
+			agentRole: context.agentRole,
+			taskType: context.taskType ?? '',
+			taskId: context.taskId ?? '',
+			inputTokens: 0,
+			outputTokens: 0,
+			cachedTokens: 0,
+			latencyMs,
+			cost: 0,
+			success: false,
+			error: lastError?.message,
+		});
+
+		res.status(502).json({ error: lastError?.message ?? 'All providers failed' });
 	});
 
 	// Metrics endpoints
