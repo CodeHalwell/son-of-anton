@@ -9,6 +9,15 @@ export interface FailoverSlot {
 	readonly model: string;
 }
 
+/** Returns true for events that represent content visible to the consumer. */
+function isContentEvent(event: AgentEvent): boolean {
+	return event.type === 'text_delta'
+		|| event.type === 'tool_use_start'
+		|| event.type === 'tool_use_delta'
+		|| event.type === 'tool_use_stop'
+		|| event.type === 'thinking_delta';
+}
+
 /**
  * FailoverChain wraps an ordered list of (adapter, model) pairs and
  * implements the ProviderAdapter contract (§10.1 of AGENTIC_PLATFORM_PLAN.md).
@@ -18,7 +27,8 @@ export interface FailoverSlot {
  *
  *   Pre-stream failover — error before any content event (text_delta,
  *   tool_use_start, thinking_delta): the caller sees nothing from the failed
- *   attempt. The next adapter starts cleanly.
+ *   attempt. Pre-content events (message_start, usage, etc.) are buffered and
+ *   discarded on retry so the fallback adapter starts cleanly.
  *
  *   Mid-stream failover — error after content events have already been
  *   yielded: the chain advances to the next adapter, which replays the full
@@ -95,6 +105,12 @@ export class FailoverChain implements ProviderAdapter {
 			const adapterReq: UniformRequest = { ...req, model };
 			let shouldAdvance = false;
 
+			// Buffer events that arrive before the first content event.  If a
+			// retryable error occurs before any content is seen, discard the buffer
+			// so the caller never observes the failed adapter's preamble.
+			const preContentBuffer: AgentEvent[] = [];
+			let contentSeen = false;
+
 			try {
 				for await (const event of adapter.send(adapterReq, signal)) {
 					// Retryable error — advance to next adapter (consuming the event
@@ -104,6 +120,22 @@ export class FailoverChain implements ProviderAdapter {
 						lastErrorMessage = event.message;
 						shouldAdvance = true;
 						break;
+					}
+
+					if (!contentSeen) {
+						if (isContentEvent(event)) {
+							// First content seen — flush the buffered preamble then yield
+							// the content event itself.
+							contentSeen = true;
+							for (const buffered of preContentBuffer) {
+								yield buffered;
+							}
+							preContentBuffer.length = 0;
+						} else {
+							// Not content yet — buffer and continue.
+							preContentBuffer.push(event);
+							continue;
+						}
 					}
 
 					yield event;
@@ -117,9 +149,16 @@ export class FailoverChain implements ProviderAdapter {
 
 			if (!shouldAdvance) {
 				// Adapter completed normally (or emitted a non-retryable error).
+				// Flush any remaining buffered pre-content events so the caller gets
+				// the full picture (e.g. usage or message_stop with no content).
+				if (!contentSeen) {
+					for (const buffered of preContentBuffer) {
+						yield buffered;
+					}
+				}
 				return;
 			}
-			// Loop continues to try the next adapter.
+			// Loop continues to try the next adapter — buffer is discarded.
 		}
 
 		// All adapters exhausted.
