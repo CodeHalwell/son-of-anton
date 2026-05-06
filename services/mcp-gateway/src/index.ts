@@ -6,6 +6,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { FalkorDBClient } from './clients/falkordb';
 import { QdrantClient } from './clients/qdrant';
 import { createMcpServer } from './server';
+import { prometheusHandler } from '@soa/metrics';
 
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 
@@ -70,6 +71,12 @@ const httpServer = http.createServer(async (req, res) => {
 		return;
 	}
 
+	// Prometheus metrics endpoint
+	if (url.pathname === '/metrics') {
+		prometheusHandler()(req, res);
+		return;
+	}
+
 	res.writeHead(404, { 'Content-Type': 'application/json' });
 	res.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -86,6 +93,7 @@ async function start(): Promise<void> {
 		console.log(`[mcp-gateway] MCP server listening on port ${PORT}`);
 		console.log(`[mcp-gateway] SSE endpoint: http://localhost:${PORT}/sse`);
 		console.log(`[mcp-gateway] Health endpoint: http://localhost:${PORT}/health`);
+		console.log(`[mcp-gateway] Metrics endpoint: http://localhost:${PORT}/metrics`);
 	});
 }
 

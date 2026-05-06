@@ -91,5 +91,6 @@ export interface UnifiedResponse {
 	inputTokens: number;
 	outputTokens: number;
 	cachedTokens: number;
+	cacheCreationTokens: number;
 	finishReason: string;
 }

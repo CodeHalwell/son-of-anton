@@ -1,7 +1,7 @@
 {
 	"name": "@son-of-anton/checkpoints",
 	"version": "0.1.0",
-	"description": "Workspace Checkpoints service — byte-level snapshots before every agent action",
+	"description": "Workspace Checkpoints service \u2014 byte-level snapshots before every agent action",
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
@@ -10,6 +10,7 @@
 		"test": "node --test dist/test/**/*.test.js"
 	},
 	"dependencies": {
+		"@soa/metrics": "file:../_lib/metrics",
 		"express": "^4.21.0",
 		"uuid": "^10.0.0"
 	},

@@ -15,12 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
-COPY package*.json ./
-COPY tsconfig.json ./
-RUN npm install
+COPY _lib/metrics/ ./_lib/metrics/
+COPY indexer/package*.json ./
+COPY indexer/tsconfig.json ./
+RUN npm install --legacy-peer-deps
 
 # Copy source and build
-COPY src/ ./src/
+COPY indexer/src/ ./src/
 RUN npx tsc
 
 EXPOSE 8080

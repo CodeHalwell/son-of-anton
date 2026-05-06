@@ -13,12 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY _lib/metrics/ ./_lib/metrics/
+COPY lsif/package*.json ./
+COPY lsif/tsconfig.json ./
 RUN npm install
 
 # Copy source and build
-COPY src/ ./src/
+COPY lsif/src/ ./src/
 RUN npx tsc
 
 # Create directories for LSIF output and snapshots

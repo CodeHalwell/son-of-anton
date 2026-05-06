@@ -147,7 +147,7 @@ export function fromAnthropicResponse(response: Record<string, unknown>): Unifie
 		.map(block => block.text ?? '')
 		.join('') ?? '';
 
-	const usage = response.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number } | undefined;
+	const usage = response.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
 
 	return {
 		content: textContent,
@@ -155,6 +155,7 @@ export function fromAnthropicResponse(response: Record<string, unknown>): Unifie
 		inputTokens: usage?.input_tokens ?? 0,
 		outputTokens: usage?.output_tokens ?? 0,
 		cachedTokens: usage?.cache_read_input_tokens ?? 0,
+		cacheCreationTokens: usage?.cache_creation_input_tokens ?? 0,
 		finishReason: response.stop_reason as string ?? 'unknown',
 	};
 }
@@ -171,6 +172,7 @@ export function fromOpenAIResponse(response: Record<string, unknown>): UnifiedRe
 		inputTokens: usage?.prompt_tokens ?? 0,
 		outputTokens: usage?.completion_tokens ?? 0,
 		cachedTokens: usage?.prompt_tokens_details?.cached_tokens ?? 0,
+		cacheCreationTokens: 0,
 		finishReason: firstChoice?.finish_reason ?? 'unknown',
 	};
 }

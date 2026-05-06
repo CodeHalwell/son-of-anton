@@ -6,6 +6,7 @@ import path from 'path';
 import { ACPClientImpl } from './client';
 import { AgentRegistry } from './registry/agentRegistry';
 import { ACPDispatcher } from './dispatcher';
+import { prometheusHandler } from '@soa/metrics';
 
 const PORT = parseInt(process.env.ACP_PORT ?? '3300', 10);
 const CONFIG_PATH = process.env.ACP_CONFIG_PATH
@@ -104,6 +105,12 @@ const httpServer = http.createServer(async (req, res) => {
 			res.writeHead(404, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify({ error: (err as Error).message }));
 		}
+		return;
+	}
+
+	// Prometheus metrics endpoint
+	if (url.pathname === '/metrics') {
+		prometheusHandler()(req, res);
 		return;
 	}
 

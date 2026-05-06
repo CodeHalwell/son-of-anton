@@ -3,11 +3,12 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY _lib/metrics/ ./_lib/metrics/
+COPY checkpoints/package.json checkpoints/package-lock.json* ./
 RUN npm install
 
-COPY tsconfig.json ./
-COPY src/ ./src/
+COPY checkpoints/tsconfig.json ./
+COPY checkpoints/src/ ./src/
 
 RUN npx tsc
 
@@ -18,7 +19,7 @@ WORKDIR /app
 
 COPY --from=build /app/dist/src/ ./dist/
 COPY --from=build /app/node_modules/ ./node_modules/
-COPY package.json ./
+COPY checkpoints/package.json ./
 
 EXPOSE 3201
 

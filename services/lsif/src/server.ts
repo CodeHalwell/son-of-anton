@@ -4,6 +4,7 @@
 import http from 'http';
 import { LsifPipeline } from './pipeline';
 import { LsifConfig } from './config';
+import { prometheusHandler } from '@soa/metrics';
 
 export class LsifServer {
 	private server: http.Server | null = null;
@@ -109,6 +110,12 @@ export class LsifServer {
 				message: `LSIF/SCIP pipeline started for language: ${language}`,
 				language,
 			}));
+			return;
+		}
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			prometheusHandler()(req, res);
 			return;
 		}
 

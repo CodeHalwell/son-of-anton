@@ -40,8 +40,8 @@ services:
 
   indexer:
     build:
-      context: ./services/indexer
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: indexer/Dockerfile
     container_name: soa-indexer
     depends_on:
       falkordb:
@@ -68,8 +68,8 @@ services:
 
   lsif:
     build:
-      context: ./services/lsif
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: lsif/Dockerfile
     container_name: soa-lsif
     depends_on:
       falkordb:
@@ -93,8 +93,8 @@ services:
 
   mcp-gateway:
     build:
-      context: ./services/mcp-gateway
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: mcp-gateway/Dockerfile
     container_name: soa-mcp-gateway
     depends_on:
       falkordb:
@@ -317,8 +317,8 @@ services:
 
   model-router:
     build:
-      context: ./services/model-router
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: model-router/Dockerfile
     container_name: soa-model-router
     ports:
       - "${MODEL_ROUTER_PORT:-3200}:3200"
@@ -335,8 +335,8 @@ services:
 
   checkpoints:
     build:
-      context: ./services/checkpoints
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: checkpoints/Dockerfile
     container_name: soa-checkpoints
     ports:
       - "${CHECKPOINT_PORT:-3201}:3201"
@@ -380,8 +380,8 @@ services:
 
   acp-client:
     build:
-      context: ./services/acp-client
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: acp-client/Dockerfile
     container_name: soa-acp-client
     ports:
       - "${ACP_PORT:-3300}:3300"
@@ -401,8 +401,8 @@ services:
 
   build-dag:
     build:
-      context: ./services/build-dag
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: build-dag/Dockerfile
     container_name: soa-build-dag
     depends_on:
       falkordb:
@@ -426,8 +426,8 @@ services:
 
   context-sanitiser:
     build:
-      context: ./services/context-sanitiser
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: context-sanitiser/Dockerfile
     container_name: soa-context-sanitiser
     ports:
       - "${SANITISER_PORT:-3302}:3302"

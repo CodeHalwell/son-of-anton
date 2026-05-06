@@ -8,10 +8,12 @@ import type { Request, Response } from 'express';
 import { CheckpointManager } from './checkpointManager.js';
 import { CheckpointStorage } from './storage.js';
 import type { CheckpointCreateRequest } from './types.js';
+import { expressMetricsMiddleware, prometheusHandler } from '@soa/metrics';
 
 export function createServer(manager: CheckpointManager): express.Express {
 	const app = express();
 	app.use(express.json());
+	app.use(expressMetricsMiddleware('checkpoints'));
 
 	app.get('/health', (_req: Request, res: Response) => {
 		res.json({ status: 'ok', service: 'checkpoints' });
@@ -78,6 +80,8 @@ await manager.deleteSession(sessionId);
 		}
 	});
 
+	app.get('/metrics', prometheusHandler() as any);
+
 	return app;
 }
 
@@ -87,5 +91,6 @@ export function startServer(manager: CheckpointManager): void {
 
 	app.listen(port, () => {
 		console.log(`Checkpoints service listening on port ${port}`);
+		console.log(`Checkpoints metrics endpoint: http://localhost:${port}/metrics`);
 	});
 }

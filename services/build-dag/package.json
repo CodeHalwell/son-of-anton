@@ -1,7 +1,7 @@
 {
 	"name": "soa-build-dag",
 	"version": "1.0.0",
-	"description": "Son of Anton — Build system DAG extractor and query service",
+	"description": "Son of Anton \u2014 Build system DAG extractor and query service",
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
@@ -11,8 +11,9 @@
 		"lint": "eslint src/**/*.ts"
 	},
 	"dependencies": {
-		"redis": "^4.7.0",
-		"js-yaml": "^4.1.0"
+		"@soa/metrics": "file:../_lib/metrics",
+		"js-yaml": "^4.1.0",
+		"redis": "^4.7.0"
 	},
 	"devDependencies": {
 		"@types/js-yaml": "^4.0.9",
