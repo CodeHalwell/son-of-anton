@@ -1,7 +1,7 @@
 {
 	"name": "soa-mcp-gateway",
 	"version": "1.0.0",
-	"description": "Son of Anton \u2014 MCP gateway exposing code graph and vector search tools",
+	"description": "Son of Anton — MCP gateway exposing code graph and vector search tools",
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
@@ -13,7 +13,6 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.12.0",
 		"@qdrant/js-client-rest": "^1.12.0",
-		"@soa/metrics": "file:../_lib/metrics",
 		"redis": "^4.7.0",
 		"zod": "^3.23.0"
 	},

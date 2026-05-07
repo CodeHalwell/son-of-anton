@@ -6,7 +6,7 @@ import path from 'path';
 import { ACPClientImpl } from './client';
 import { AgentRegistry } from './registry/agentRegistry';
 import { ACPDispatcher } from './dispatcher';
-import { prometheusHandler } from '@soa/metrics';
+import { prometheusHandler } from '../../_lib/metrics/dist/index.js';
 
 const PORT = parseInt(process.env.ACP_PORT ?? '3300', 10);
 const CONFIG_PATH = process.env.ACP_CONFIG_PATH

@@ -10,7 +10,7 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
-import { counter, histogram, expressMetricsMiddleware, prometheusHandler } from '@soa/metrics';
+import { counter, histogram, expressMetricsMiddleware, prometheusHandler } from '../../_lib/metrics/dist/index.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG

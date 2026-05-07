@@ -6,7 +6,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { FalkorDBClient } from './clients/falkordb';
 import { QdrantClient } from './clients/qdrant';
 import { createMcpServer } from './server';
-import { prometheusHandler } from '@soa/metrics';
+import { prometheusHandler } from '../../_lib/metrics/dist/index.js';
 
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 

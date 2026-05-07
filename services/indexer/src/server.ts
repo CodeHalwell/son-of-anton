@@ -4,7 +4,7 @@
 import http from 'http';
 import { Indexer } from './indexer';
 import { IndexerConfig } from './config';
-import { prometheusHandler } from '@soa/metrics';
+import { prometheusHandler } from '../../_lib/metrics/dist/index.js';
 
 export class IndexerServer {
 	private server: http.Server | null = null;

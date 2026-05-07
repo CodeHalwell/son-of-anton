@@ -1,7 +1,7 @@
 {
 	"name": "soa-context-sanitiser",
 	"version": "1.0.0",
-	"description": "Son of Anton \u2014 Prompt injection detection and context sanitisation",
+	"description": "Son of Anton — Prompt injection detection and context sanitisation",
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
@@ -10,9 +10,7 @@
 		"test": "node --test test/**/*.test.js",
 		"lint": "eslint src/**/*.ts"
 	},
-	"dependencies": {
-		"@soa/metrics": "file:../_lib/metrics"
-	},
+	"dependencies": {},
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"typescript": "^5.6.0"

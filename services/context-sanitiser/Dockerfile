@@ -10,11 +10,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY _lib/metrics/ ./_lib/metrics/
-COPY context-sanitiser/package*.json context-sanitiser/tsconfig.json ./
+COPY package*.json tsconfig.json ./
 RUN npm ci
 
-COPY context-sanitiser/src/ ./src/
+COPY src/ ./src/
 RUN npx tsc
 
 EXPOSE 3302

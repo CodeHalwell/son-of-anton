@@ -2,12 +2,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY _lib/metrics/ ./_lib/metrics/
-COPY model-router/package.json model-router/package-lock.json* ./
+COPY package.json package-lock.json* ./
 RUN npm install
 
-COPY model-router/tsconfig.json ./
-COPY model-router/src/ ./src/
+COPY tsconfig.json ./
+COPY src/ ./src/
 
 RUN npm run build
 
@@ -18,7 +17,7 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules/ ./node_modules/
 COPY --from=build /app/dist/src/ ./dist/
-COPY model-router/config/ ./config/
+COPY config/ ./config/
 
 EXPOSE 3200
 

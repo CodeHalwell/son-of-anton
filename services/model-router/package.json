@@ -10,7 +10,6 @@
 		"test": "node --test dist/test/*.js"
 	},
 	"dependencies": {
-		"@soa/metrics": "file:../_lib/metrics",
 		"express": "^4.21.0",
 		"undici": "^6.21.0"
 	},

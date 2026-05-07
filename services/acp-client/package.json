@@ -1,7 +1,7 @@
 {
 	"name": "soa-acp-client",
 	"version": "1.0.0",
-	"description": "Son of Anton \u2014 Agent Client Protocol client for multi-agent integration",
+	"description": "Son of Anton — Agent Client Protocol client for multi-agent integration",
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
@@ -11,7 +11,6 @@
 		"lint": "eslint src/**/*.ts"
 	},
 	"dependencies": {
-		"@soa/metrics": "file:../_lib/metrics",
 		"express": "^4.21.0"
 	},
 	"devDependencies": {

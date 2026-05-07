@@ -9,11 +9,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY _lib/metrics/ ./_lib/metrics/
-COPY mcp-gateway/package*.json mcp-gateway/tsconfig.json ./
+COPY package*.json tsconfig.json ./
 RUN npm ci
 
-COPY mcp-gateway/src/ ./src/
+COPY src/ ./src/
 RUN npx tsc
 
 EXPOSE 3100
