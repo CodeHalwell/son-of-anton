@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package*.json tsconfig.json ./
-RUN npm ci
+RUN npm install
 
 COPY src/ ./src/
 COPY _lib/metrics/dist/ ./_lib/metrics/dist/
