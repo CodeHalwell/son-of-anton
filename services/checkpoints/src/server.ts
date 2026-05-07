@@ -8,7 +8,7 @@ import type { Request, Response } from 'express';
 import { CheckpointManager } from './checkpointManager.js';
 import { CheckpointStorage } from './storage.js';
 import type { CheckpointCreateRequest } from './types.js';
-import { expressMetricsMiddleware, prometheusHandler } from '../../_lib/metrics/dist/index.js';
+import { expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
 
 export function createServer(manager: CheckpointManager): express.Express {
 	const app = express();

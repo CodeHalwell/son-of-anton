@@ -12,7 +12,7 @@ function escapeLabel(value: string): string {
 }
 
 function serializeLabels(labels: Labels): string {
-	const pairs = Object.entries(labels);
+	const pairs = Object.entries(labels).sort((a, b) => a[0].localeCompare(b[0]));
 	if (pairs.length === 0) {
 		return '';
 	}
@@ -20,7 +20,7 @@ function serializeLabels(labels: Labels): string {
 }
 
 function serializeLabelsWithExtra(labels: Labels, extraKey: string, extraValue: string): string {
-	const pairs = [...Object.entries(labels), [extraKey, extraValue]];
+	const pairs = [...Object.entries(labels).sort((a, b) => a[0].localeCompare(b[0])), [extraKey, extraValue]];
 	return `{${pairs.map(([k, v]) => `${k}="${escapeLabel(v)}"`).join(',')}}`;
 }
 
@@ -258,7 +258,7 @@ export function expressMetricsMiddleware(serviceName?: string): (req: any, res: 
 		const endTimer = requestDuration.startTimer();
 
 		res.on('finish', () => {
-			const route: string = (req.route as { path?: string } | undefined)?.path ?? (req.url as string | undefined) ?? '/';
+			const route: string = (req.route as { path?: string } | undefined)?.path ?? '(not found)';
 			const statusCode = String(res.statusCode as number);
 			const labels: Labels = { service, method, route, status_code: statusCode };
 			endTimer(labels);

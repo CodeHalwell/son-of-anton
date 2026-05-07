@@ -19,6 +19,7 @@ RUN npm install
 
 # Copy source and build
 COPY src/ ./src/
+COPY _lib/metrics/dist/ ./_lib/metrics/dist/
 RUN npx tsc
 
 # Create directories for LSIF output and snapshots
