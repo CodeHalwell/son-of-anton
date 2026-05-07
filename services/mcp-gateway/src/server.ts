@@ -25,6 +25,7 @@ export function createMcpServer(db: FalkorDBClient, qdrant: QdrantClient): McpSe
 	});
 
 	// --- symbol_lookup ---
+	// @ts-ignore TS2589: MCP SDK z.enum() schema inference hits TypeScript's instantiation depth limit
 	server.tool(
 		'symbol_lookup',
 		'Look up a symbol (function, class, type, module) by name. Returns definition location, type, signature, file path, and line range.',
@@ -72,6 +73,7 @@ export function createMcpServer(db: FalkorDBClient, qdrant: QdrantClient): McpSe
 	);
 
 	// --- dependency_traversal ---
+	// @ts-ignore TS2589: MCP SDK z.enum() schema inference hits TypeScript's instantiation depth limit
 	server.tool(
 		'dependency_traversal',
 		'Traverse the dependency tree of a file or function. Shows what a symbol/file depends on (imports, calls) at configurable depth.',
@@ -209,6 +211,7 @@ export function createMcpServer(db: FalkorDBClient, qdrant: QdrantClient): McpSe
 	);
 
 	// --- memory_query ---
+	// @ts-ignore TS2589: MCP SDK z.enum() schema inference hits TypeScript's instantiation depth limit
 	server.tool(
 		'memory_query',
 		'Search long-term project memory by keyword, type, topic, or time range. Returns decisions, conventions, warnings, and preferences stored across sessions.',
@@ -244,6 +247,7 @@ export function createMcpServer(db: FalkorDBClient, qdrant: QdrantClient): McpSe
 	);
 
 	// --- memory_record ---
+	// @ts-ignore TS2589: MCP SDK z.enum() schema inference hits TypeScript's instantiation depth limit
 	server.tool(
 		'memory_record',
 		'Record a new entry in long-term project memory. Only the orchestrator agent and humans can write. Creates temporal entries that track how project knowledge evolves.',
@@ -321,6 +325,7 @@ export function createMcpServer(db: FalkorDBClient, qdrant: QdrantClient): McpSe
 	);
 
 	// --- spec_read ---
+	// @ts-ignore TS2589: MCP SDK z.enum() schema inference hits TypeScript's instantiation depth limit
 	server.tool(
 		'spec_read',
 		'Read the content of a spec file (requirements, design, tasks, or properties) for a specific feature.',
