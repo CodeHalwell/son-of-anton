@@ -102,7 +102,8 @@ export class TreeSitterManager {
 		return parser;
 	}
 
-	private loadGrammar(language: string): unknown {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private loadGrammar(language: string): any {
 		switch (language) {
 			case 'typescript':
 				return TypeScript.typescript;
