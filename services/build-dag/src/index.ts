@@ -7,6 +7,7 @@ import { extractMakeDag } from './extractors/makeExtractor';
 import { extractDockerComposeDag } from './extractors/dockerComposeExtractor';
 import { DagStore } from './graph/dagStore';
 import type { ExtractionResult } from './types';
+import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
 
 const PORT = parseInt(process.env.BUILD_DAG_PORT ?? '3301', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
@@ -46,8 +47,20 @@ async function extractAll(): Promise<void> {
 	console.log(`[build-dag] Extracted ${allTargets.length} targets, ${serviceMap.size} services from ${results.length} ecosystems`);
 }
 
+const metricsHandler = prometheusHandler();
+
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	res.on('finish', () => {
+		recordHttpRequest('build-dag', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+	});
+
+	// Metrics endpoint
+	if (url.pathname === '/metrics') {
+		metricsHandler(req, res);
+		return;
+	}
 
 	// Health endpoint
 	if (url.pathname === '/health') {

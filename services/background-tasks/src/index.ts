@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import Docker from 'dockerode';
 import { BackgroundTask, TaskConfig, TaskState, TaskStatus, ResourceLimits } from './types';
+import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
 
 const PORT = parseInt(process.env.BACKGROUND_TASKS_PORT ?? '8093', 10);
 const STATE_DIR = process.env.STATE_DIR ?? '/data/background';
@@ -400,7 +401,20 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 	});
 }
 
+const metricsHandler = prometheusHandler();
+
 const httpServer = http.createServer(async (req, res) => {
+	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	res.on('finish', () => {
+		recordHttpRequest('background-tasks', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+	});
+
+	if (url.pathname === '/metrics') {
+		metricsHandler(req, res);
+		return;
+	}
+
 	try {
 		await handleRequest(req, res);
 	} catch (err) {

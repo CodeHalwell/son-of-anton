@@ -10,7 +10,9 @@
 		"test": "node --test test/**/*.test.js",
 		"lint": "eslint src/**/*.ts"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@son-of-anton/metrics": "file:../_lib/metrics"
+	},
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"typescript": "^5.6.0"

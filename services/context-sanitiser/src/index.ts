@@ -4,15 +4,27 @@
 import http from 'http';
 import { ContextSanitiser } from './sanitiser';
 import { WorkspaceScanner } from './scanner';
+import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
 
 const PORT = parseInt(process.env.SANITISER_PORT ?? '3302', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
 
 const sanitiser = new ContextSanitiser();
 const scanner = new WorkspaceScanner();
+const metricsHandler = prometheusHandler();
 
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	res.on('finish', () => {
+		recordHttpRequest('context-sanitiser', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+	});
+
+	// Metrics endpoint
+	if (url.pathname === '/metrics') {
+		metricsHandler(req, res);
+		return;
+	}
 
 	// Health endpoint
 	if (url.pathname === '/health') {

@@ -4,11 +4,13 @@
 import http from 'http';
 import { Indexer } from './indexer';
 import { IndexerConfig } from './config';
+import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
 
 export class IndexerServer {
 	private server: http.Server | null = null;
 	private readonly indexer: Indexer;
 	private readonly config: IndexerConfig;
+	private readonly metricsHandler = prometheusHandler();
 
 	constructor(indexer: Indexer, config: IndexerConfig) {
 		this.indexer = indexer;
@@ -20,6 +22,11 @@ export class IndexerServer {
 	 */
 	start(): void {
 		this.server = http.createServer(async (req, res) => {
+			const start = Date.now();
+			const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
+			res.on('finish', () => {
+				recordHttpRequest('indexer', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+			});
 			try {
 				await this.handleRequest(req, res);
 			} catch (err) {
@@ -50,6 +57,12 @@ export class IndexerServer {
 	private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 		const method = req.method ?? 'GET';
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			this.metricsHandler(req, res);
+			return;
+		}
 
 		// GET /health — service status
 		if (method === 'GET' && url.pathname === '/health') {
