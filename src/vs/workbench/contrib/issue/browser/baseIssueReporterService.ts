@@ -694,6 +694,14 @@ export class BaseIssueReporterService extends Disposable {
 			this.openLink(url);
 		});
 
+		this.addEventListener('extensionBugsLink', 'keydown', (e: Event) => {
+			e.stopPropagation();
+			if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
+				const url = (<HTMLElement>e.target).innerText;
+				this.openLink(url);
+			}
+		});
+
 		this.addEventListener('disableExtensions', 'keydown', (e: Event) => {
 			e.stopPropagation();
 			if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
