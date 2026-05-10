@@ -612,7 +612,7 @@ Three sprints to land the subscription-integration foundation, then the existing
 
 - [x] **Provider failover** (§10.1).
 - [x] **Connection pooling** and **endpoint probing** (§8.3, §8.4).
-- [ ] **Shared metrics library** + `/metrics` on every service (§11.1, F-9, F-24).
+- [x] **Shared metrics library** + `/metrics` on every service (§11.1, F-9, F-24).
 - [ ] **Cache-hit-rate instrumentation** (§11.2, F-10).
 - [ ] **Cross-service tracing** (§11.3, F-25).
 - [ ] **`buildCachedRequest()` helper** (§8.1, F-12).

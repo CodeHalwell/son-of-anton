@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import express from 'express';
+import { MetricsRegistry, expressMetricsMiddleware } from '../../_lib/metrics/dist/src/index.cjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -117,9 +118,11 @@ export function createServer() {
 	let failoverConfig = loadFailoverConfig();
 	const router = new ModelRouter(config);
 	const metrics = new MetricsCollector();
+	const promRegistry = new MetricsRegistry();
 	const app = express();
 
 	app.use(express.json({ limit: '10mb' }));
+	app.use(expressMetricsMiddleware(promRegistry, 'model-router'));
 
 	// Health endpoint
 	app.get('/health', (_req, res) => {
@@ -281,8 +284,15 @@ export function createServer() {
 		res.status(502).json({ error: lastError?.message ?? 'All providers failed' });
 	});
 
-	// Metrics endpoints
+	// Prometheus metrics endpoint
 	app.get('/metrics', (_req, res) => {
+		const body = promRegistry.prometheus();
+		res.set('Content-Type', 'text/plain; version=0.0.4');
+		res.send(body);
+	});
+
+	// Model routing metrics (JSON)
+	app.get('/metrics/json', (_req, res) => {
 		res.json(metrics.getAggregated());
 	});
 

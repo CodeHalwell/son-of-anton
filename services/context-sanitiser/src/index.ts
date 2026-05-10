@@ -4,15 +4,22 @@
 import http from 'http';
 import { ContextSanitiser } from './sanitiser';
 import { WorkspaceScanner } from './scanner';
+import { MetricsRegistry, prometheusHandler } from '../../_lib/metrics/dist/src/index';
 
 const PORT = parseInt(process.env.SANITISER_PORT ?? '3302', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
 
 const sanitiser = new ContextSanitiser();
 const scanner = new WorkspaceScanner();
+const metricsRegistry = new MetricsRegistry();
+const requestsTotal = metricsRegistry.counter('http_requests_total', 'Total HTTP requests');
+const requestDuration = metricsRegistry.histogram('http_request_duration_seconds', 'HTTP request duration in seconds');
 
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const done = requestDuration.startTimer({ method: req.method ?? 'GET', path: url.pathname });
+	res.on('finish', done);
+	requestsTotal.inc({ method: req.method ?? 'GET', path: url.pathname });
 
 	// Health endpoint
 	if (url.pathname === '/health') {
@@ -82,6 +89,12 @@ const httpServer = http.createServer(async (req, res) => {
 		res.end(JSON.stringify({
 			prompt: ContextSanitiser.getSecurityPromptAddition(),
 		}));
+		return;
+	}
+
+	// Prometheus metrics
+	if (url.pathname === '/metrics' && req.method === 'GET') {
+		prometheusHandler(metricsRegistry)(req, res);
 		return;
 	}
 
