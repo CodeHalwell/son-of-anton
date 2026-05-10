@@ -115,8 +115,14 @@ function compare(from: IUserDataProfileInfo[] | null, to: IUserDataProfileInfo[]
 	to = to.filter(({ id }) => !ignoredProfiles.includes(id));
 	const fromKeys = from.map(({ id }) => id);
 	const toKeys = to.map(({ id }) => id);
-	const added = toKeys.filter(key => !fromKeys.includes(key));
-	const removed = fromKeys.filter(key => !toKeys.includes(key));
+
+	// ⚡ BOLT OPTIMIZATION:
+	// Convert array to Set to optimize the O(N*M) nested traversal during filtering.
+	const fromKeysSet = new Set(fromKeys);
+	const toKeysSet = new Set(toKeys);
+
+	const added = toKeys.filter(key => !fromKeysSet.has(key));
+	const removed = fromKeys.filter(key => !toKeysSet.has(key));
 	const updated: string[] = [];
 
 	for (const { id, name, icon, useDefaultFlags } of from) {
