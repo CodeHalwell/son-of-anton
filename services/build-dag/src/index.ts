@@ -6,12 +6,16 @@ import { extractNodeDag } from './extractors/nodeExtractor';
 import { extractMakeDag } from './extractors/makeExtractor';
 import { extractDockerComposeDag } from './extractors/dockerComposeExtractor';
 import { DagStore } from './graph/dagStore';
+import { MetricsRegistry, prometheusHandler } from '../../_lib/metrics/dist/src/index';
 import type { ExtractionResult } from './types';
 
 const PORT = parseInt(process.env.BUILD_DAG_PORT ?? '3301', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
 
 const store = new DagStore();
+const metricsRegistry = new MetricsRegistry();
+const requestsTotal = metricsRegistry.counter('http_requests_total', 'Total HTTP requests');
+const requestDuration = metricsRegistry.histogram('http_request_duration_seconds', 'HTTP request duration in seconds');
 
 /** Run all extractors and merge results into the store. */
 async function extractAll(): Promise<void> {
@@ -48,6 +52,9 @@ async function extractAll(): Promise<void> {
 
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const done = requestDuration.startTimer({ method: req.method ?? 'GET', path: url.pathname });
+	res.on('finish', done);
+	requestsTotal.inc({ method: req.method ?? 'GET', path: url.pathname });
 
 	// Health endpoint
 	if (url.pathname === '/health') {
@@ -132,6 +139,12 @@ const httpServer = http.createServer(async (req, res) => {
 			targets: store.targetCount,
 			extractedAt: store.lastExtractedAt,
 		}));
+		return;
+	}
+
+	// Prometheus metrics
+	if (url.pathname === '/metrics' && req.method === 'GET') {
+		prometheusHandler(metricsRegistry)(req, res);
 		return;
 	}
 

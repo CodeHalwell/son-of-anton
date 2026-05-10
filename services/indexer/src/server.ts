@@ -4,11 +4,15 @@
 import http from 'http';
 import { Indexer } from './indexer';
 import { IndexerConfig } from './config';
+import { MetricsRegistry, prometheusHandler } from '../../_lib/metrics/dist/src/index';
 
 export class IndexerServer {
 	private server: http.Server | null = null;
 	private readonly indexer: Indexer;
 	private readonly config: IndexerConfig;
+	private readonly metrics = new MetricsRegistry();
+	private readonly requestsTotal = this.metrics.counter('http_requests_total', 'Total HTTP requests');
+	private readonly requestDuration = this.metrics.histogram('http_request_duration_seconds', 'HTTP request duration in seconds');
 
 	constructor(indexer: Indexer, config: IndexerConfig) {
 		this.indexer = indexer;
@@ -50,6 +54,15 @@ export class IndexerServer {
 	private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 		const method = req.method ?? 'GET';
+		const done = this.requestDuration.startTimer({ method, path: url.pathname });
+		res.on('finish', done);
+		this.requestsTotal.inc({ method, path: url.pathname });
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			prometheusHandler(this.metrics)(req, res);
+			return;
+		}
 
 		// GET /health — service status
 		if (method === 'GET' && url.pathname === '/health') {

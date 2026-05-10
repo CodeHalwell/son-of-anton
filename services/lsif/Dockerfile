@@ -12,13 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Shared metrics library — available at /_lib/ (two levels up from /app/src/ and /app/dist/)
+COPY _lib/metrics/dist/src/ /_lib/metrics/dist/src/
+
 # Install dependencies
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY lsif/package*.json ./
+COPY lsif/tsconfig.json ./
 RUN npm install
 
 # Copy source and build
-COPY src/ ./src/
+COPY lsif/src/ ./src/
 RUN npx tsc
 
 # Create directories for LSIF output and snapshots
