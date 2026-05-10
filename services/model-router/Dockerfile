@@ -2,11 +2,14 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# Shared metrics library — available at /_lib/ (two levels up from /app/src/ and /app/dist/)
+COPY _lib/metrics/dist/src/ /_lib/metrics/dist/src/
+
+COPY model-router/package.json model-router/package-lock.json* ./
 RUN npm install
 
-COPY tsconfig.json ./
-COPY src/ ./src/
+COPY model-router/tsconfig.json ./
+COPY model-router/src/ ./src/
 
 RUN npm run build
 
@@ -17,7 +20,8 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules/ ./node_modules/
 COPY --from=build /app/dist/src/ ./dist/
-COPY config/ ./config/
+COPY --from=build /_lib/metrics/dist/src/ /_lib/metrics/dist/src/
+COPY model-router/config/ ./config/
 
 EXPOSE 3200
 

@@ -9,10 +9,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY package*.json tsconfig.json ./
+# Shared metrics library — available at /_lib/ (two levels up from /app/src/ and /app/dist/)
+COPY _lib/metrics/dist/src/ /_lib/metrics/dist/src/
+
+COPY build-dag/package*.json build-dag/tsconfig.json ./
 RUN npm ci
 
-COPY src/ ./src/
+COPY build-dag/src/ ./src/
 RUN npx tsc
 
 EXPOSE 3301
