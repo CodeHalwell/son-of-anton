@@ -1247,16 +1247,19 @@ function compare(from: ConfigurationModel | undefined, to: ConfigurationModel | 
 
 	const fromOverrideIdentifiers = from?.getAllOverrideIdentifiers() || [];
 	const toOverrideIdentifiers = to?.getAllOverrideIdentifiers() || [];
+	const toSet = to ? new Set(toOverrideIdentifiers) : undefined;
 
 	if (to) {
-		const addedOverrideIdentifiers = toOverrideIdentifiers.filter(key => !fromOverrideIdentifiers.includes(key));
+		// Optimize array filtering: use Set for O(1) lookups instead of Array.includes which is O(N) inside the filter O(M)
+		const fromSet = new Set(fromOverrideIdentifiers);
+		const addedOverrideIdentifiers = toOverrideIdentifiers.filter(key => !fromSet.has(key));
 		for (const identifier of addedOverrideIdentifiers) {
 			overrides.push([identifier, to.getKeysForOverrideIdentifier(identifier)]);
 		}
 	}
 
 	if (from) {
-		const removedOverrideIdentifiers = fromOverrideIdentifiers.filter(key => !toOverrideIdentifiers.includes(key));
+		const removedOverrideIdentifiers = fromOverrideIdentifiers.filter(key => !toSet!.has(key));
 		for (const identifier of removedOverrideIdentifiers) {
 			overrides.push([identifier, from.getKeysForOverrideIdentifier(identifier)]);
 		}
@@ -1264,7 +1267,7 @@ function compare(from: ConfigurationModel | undefined, to: ConfigurationModel | 
 
 	if (to && from) {
 		for (const identifier of fromOverrideIdentifiers) {
-			if (toOverrideIdentifiers.includes(identifier)) {
+			if (toSet!.has(identifier)) {
 				const result = compareConfigurationContents({ contents: from.getOverrideValue(undefined, identifier) || {}, keys: from.getKeysForOverrideIdentifier(identifier) }, { contents: to.getOverrideValue(undefined, identifier) || {}, keys: to.getKeysForOverrideIdentifier(identifier) });
 				overrides.push([identifier, [...result.added, ...result.removed, ...result.updated]]);
 			}
@@ -1275,11 +1278,14 @@ function compare(from: ConfigurationModel | undefined, to: ConfigurationModel | 
 }
 
 function compareConfigurationContents(to: { keys: string[]; contents: IStringDictionary<unknown> } | undefined, from: { keys: string[]; contents: IStringDictionary<unknown> } | undefined) {
+	// Optimize array filtering: use Set for O(1) lookups instead of Array.indexOf which is O(N) inside the filter O(M)
+	const fromKeysSet = from ? new Set(from.keys) : undefined;
+	const toKeysSet = to ? new Set(to.keys) : undefined;
 	const added = to
-		? from ? to.keys.filter(key => from.keys.indexOf(key) === -1) : [...to.keys]
+		? from ? to.keys.filter(key => !fromKeysSet!.has(key)) : [...to.keys]
 		: [];
 	const removed = from
-		? to ? from.keys.filter(key => to.keys.indexOf(key) === -1) : [...from.keys]
+		? to ? from.keys.filter(key => !toKeysSet!.has(key)) : [...from.keys]
 		: [];
 	const updated: string[] = [];
 
