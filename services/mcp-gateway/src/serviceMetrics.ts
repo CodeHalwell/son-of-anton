@@ -22,7 +22,7 @@ type LabelSet = Record<string, string>;
 // ---- serialisation ----
 
 function labelKey(labels: LabelSet): string {
-	return Object.keys(labels).sort().map(k => `${k}=${labels[k]}`).join(',');
+	return JSON.stringify(Object.entries(labels).sort());
 }
 
 function renderLabels(labels: LabelSet): string {
@@ -41,6 +41,9 @@ class CounterMetric {
 	private readonly values = new Map<string, { labels: LabelSet; value: number }>();
 
 	inc(labels: LabelSet = {}, amount = 1): void {
+		if (amount < 0) {
+			throw new Error(`Counter increment must be non-negative; got ${amount}`);
+		}
 		const key = labelKey(labels);
 		const entry = this.values.get(key);
 		if (entry) {
@@ -62,7 +65,7 @@ class CounterMetric {
 // ---- Histogram ----
 
 class HistogramMetric {
-	private readonly entries = new Map<string, { count: number; sum: number; buckets: number[] }>();
+	private readonly entries = new Map<string, { labels: LabelSet; count: number; sum: number; buckets: number[] }>();
 
 	constructor(private readonly boundaries: number[]) {}
 
@@ -70,7 +73,7 @@ class HistogramMetric {
 		const key = labelKey(labels);
 		let entry = this.entries.get(key);
 		if (!entry) {
-			entry = { count: 0, sum: 0, buckets: new Array<number>(this.boundaries.length).fill(0) };
+			entry = { labels: { ...labels }, count: 0, sum: 0, buckets: new Array<number>(this.boundaries.length).fill(0) };
 			this.entries.set(key, entry);
 		}
 		entry.count += 1;
@@ -84,17 +87,13 @@ class HistogramMetric {
 
 	serialize(name: string, help: string): string {
 		const lines = [`# HELP ${name} ${help}`, `# TYPE ${name} histogram`];
-		for (const [k, entry] of this.entries) {
-			const labels = Object.fromEntries(k.split(',').filter(Boolean).map(p => {
-				const eq = p.indexOf('=');
-				return [p.slice(0, eq), p.slice(eq + 1)] as [string, string];
-			}));
+		for (const { labels, count, sum, buckets } of this.entries.values()) {
 			for (let i = 0; i < this.boundaries.length; i++) {
-				lines.push(`${name}_bucket${renderLabels({ ...labels, le: String(this.boundaries[i]) })} ${entry.buckets[i]}`);
+				lines.push(`${name}_bucket${renderLabels({ ...labels, le: String(this.boundaries[i]) })} ${buckets[i]}`);
 			}
-			lines.push(`${name}_bucket${renderLabels({ ...labels, le: '+Inf' })} ${entry.count}`);
-			lines.push(`${name}_sum${renderLabels(labels)} ${entry.sum}`);
-			lines.push(`${name}_count${renderLabels(labels)} ${entry.count}`);
+			lines.push(`${name}_bucket${renderLabels({ ...labels, le: '+Inf' })} ${count}`);
+			lines.push(`${name}_sum${renderLabels(labels)} ${sum}`);
+			lines.push(`${name}_count${renderLabels(labels)} ${count}`);
 		}
 		return lines.join('\n');
 	}
@@ -180,7 +179,7 @@ export function recordHttpRequest(
 /** Express middleware that records request duration and count per route. */
 export function expressMetricsMiddleware(
 	options: { service: string },
-): (req: { method: string; path?: string; route?: { path: string }; url?: string },
+): (req: { method: string; route?: { path: string } },
 	res: { statusCode: number; on(event: string, fn: () => void): void },
 	next: () => void) => void {
 	const { service } = options;
@@ -188,7 +187,7 @@ export function expressMetricsMiddleware(
 		const start = Date.now();
 		res.on('finish', () => {
 			const durationSeconds = (Date.now() - start) / 1000;
-			const route = (req.route?.path as string | undefined) ?? req.path ?? req.url?.split('?')[0] ?? 'unknown';
+			const route = (req.route?.path as string | undefined) ?? 'unknown';
 			const labels = { service, method: req.method, route, status_code: String(res.statusCode) };
 			requestDuration.observe(durationSeconds, labels);
 			requestsTotal.inc(labels);

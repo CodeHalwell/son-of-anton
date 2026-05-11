@@ -22,7 +22,8 @@ export class LsifServer {
 			const start = Date.now();
 			const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 			res.on('finish', () => {
-				recordHttpRequest('lsif', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+				const route = (url.pathname.startsWith('/run/') && url.pathname !== '/run') ? '/run/:language' : url.pathname;
+				recordHttpRequest('lsif', req.method ?? 'GET', route, res.statusCode, Date.now() - start);
 			});
 			try {
 				await this.handleRequest(req, res);

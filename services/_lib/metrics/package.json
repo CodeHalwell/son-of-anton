@@ -7,7 +7,7 @@
 	"type": "commonjs",
 	"scripts": {
 		"build": "tsc",
-		"test": "node --test dist/test/metrics.test.js",
+		"test": "node --test dist/test/metrics.test.js dist/test/middleware.test.js",
 		"prepublishOnly": "npm run build"
 	},
 	"devDependencies": {

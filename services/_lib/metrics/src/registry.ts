@@ -6,13 +6,16 @@ import type { LabelSet, MetricFamily, MetricSample, HistogramSample } from './ty
 const DEFAULT_HISTOGRAM_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 
 function labelKey(labels: LabelSet): string {
-	return Object.keys(labels).sort().map(k => `${k}=${labels[k]}`).join(',');
+	return JSON.stringify(Object.entries(labels).sort());
 }
 
 export class CounterMetric {
 	private readonly values = new Map<string, { labels: LabelSet; value: number }>();
 
 	inc(labels: LabelSet = {}, amount = 1): void {
+		if (amount < 0) {
+			throw new Error(`Counter increment must be non-negative; got ${amount}`);
+		}
 		const key = labelKey(labels);
 		const entry = this.values.get(key);
 		if (entry) {

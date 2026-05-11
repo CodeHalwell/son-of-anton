@@ -25,7 +25,8 @@ export class IndexerServer {
 			const start = Date.now();
 			const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 			res.on('finish', () => {
-				recordHttpRequest('indexer', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+				const route = url.pathname.startsWith('/reindex/') ? '/reindex/:filePath' : url.pathname;
+				recordHttpRequest('indexer', req.method ?? 'GET', route, res.statusCode, Date.now() - start);
 			});
 			try {
 				await this.handleRequest(req, res);

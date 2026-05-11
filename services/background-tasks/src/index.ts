@@ -401,13 +401,20 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 	});
 }
 
+function normalizeRoute(pathname: string): string {
+	if (/^\/tasks\/[^/]+\/cancel$/.test(pathname)) { return '/tasks/:taskId/cancel'; }
+	if (/^\/tasks\/[^/]+\/results$/.test(pathname)) { return '/tasks/:taskId/results'; }
+	if (/^\/tasks\/[^/]+$/.test(pathname)) { return '/tasks/:taskId'; }
+	return pathname;
+}
+
 const metricsHandler = prometheusHandler();
 
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 	const start = Date.now();
 	res.on('finish', () => {
-		recordHttpRequest('background-tasks', req.method ?? 'GET', url.pathname, res.statusCode, Date.now() - start);
+		recordHttpRequest('background-tasks', req.method ?? 'GET', normalizeRoute(url.pathname), res.statusCode, Date.now() - start);
 	});
 
 	if (url.pathname === '/metrics') {

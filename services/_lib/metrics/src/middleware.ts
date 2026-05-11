@@ -21,7 +21,7 @@ export interface MiddlewareOptions {
 
 type NextFn = () => void;
 type ExpressMiddleware = (
-	req: { method: string; path: string; route?: { path: string } },
+	req: { method: string; route?: { path: string } },
 	res: { statusCode: number; on: (event: string, fn: () => void) => void },
 	next: NextFn
 ) => void;
@@ -33,7 +33,7 @@ export function expressMetricsMiddleware(options: MiddlewareOptions): ExpressMid
 		const start = process.hrtime.bigint();
 		res.on('finish', () => {
 			const durationSeconds = Number(process.hrtime.bigint() - start) / 1e9;
-			const route = (req.route?.path as string | undefined) ?? req.path ?? 'unknown';
+			const route = (req.route?.path as string | undefined) ?? 'unknown';
 			const labels = { service, method: req.method, route, status_code: String(res.statusCode) };
 			requestDuration.observe(durationSeconds, labels);
 			requestsTotal.inc(labels);
