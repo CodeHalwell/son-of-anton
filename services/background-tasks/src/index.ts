@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import Docker from 'dockerode';
 import { BackgroundTask, TaskConfig, TaskState, TaskStatus, ResourceLimits } from './types';
-import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 const PORT = parseInt(process.env.BACKGROUND_TASKS_PORT ?? '8093', 10);
 const STATE_DIR = process.env.STATE_DIR ?? '/data/background';

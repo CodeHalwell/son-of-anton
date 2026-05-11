@@ -4,7 +4,7 @@
 import http from 'http';
 import { LsifPipeline } from './pipeline';
 import { LsifConfig } from './config';
-import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 export class LsifServer {
 	private server: http.Server | null = null;

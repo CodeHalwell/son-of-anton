@@ -7,7 +7,7 @@ import { extractMakeDag } from './extractors/makeExtractor';
 import { extractDockerComposeDag } from './extractors/dockerComposeExtractor';
 import { DagStore } from './graph/dagStore';
 import type { ExtractionResult } from './types';
-import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 const PORT = parseInt(process.env.BUILD_DAG_PORT ?? '3301', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';

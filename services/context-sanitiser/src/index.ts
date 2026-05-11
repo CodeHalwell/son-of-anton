@@ -4,7 +4,7 @@
 import http from 'http';
 import { ContextSanitiser } from './sanitiser';
 import { WorkspaceScanner } from './scanner';
-import { prometheusHandler, recordHttpRequest } from '@son-of-anton/metrics';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 const PORT = parseInt(process.env.SANITISER_PORT ?? '3302', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
