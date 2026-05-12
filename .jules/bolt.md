@@ -9,3 +9,7 @@
 ## 2024-05-25 - O(N*M) lookups in Git optimistic updates
 **Learning:** Found nested loops during Git operations (`add`, `revert`, `clean`) when comparing file resource URI paths in array filter closures using `includes()`. This O(N*M) issue is similar to the notebook cells problem, proving this is a recurring codebase-specific performance pattern in extensions when dealing with file resources.
 **Action:** When working on extension host array manipulations, especially with large amounts of workspace resource strings (URIs), instinctively apply the `Set.has()` optimization.
+
+## 2024-05-26 - O(N*M) nested iterations in array filtering for configuration merging
+**Learning:** Found O(N*M) time complexity bottlenecks in `src/vs/platform/configuration/common/configurationModels.ts` where arrays of configuration identifiers and keys were filtered using `includes()` and `indexOf()` against other arrays.
+**Action:** When filtering an array based on the presence of its elements in another array, convert the target array to a `Set` first to reduce lookup time from O(N) to O(1), bringing the total time complexity from O(N*M) to O(N+M). This optimization pattern is crucial for performance across the codebase where operations like `filter(item => !otherArray.includes(item))` are present.
