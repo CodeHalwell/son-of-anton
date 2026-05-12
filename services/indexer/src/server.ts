@@ -4,11 +4,15 @@
 import http from 'http';
 import { Indexer } from './indexer';
 import { IndexerConfig } from './config';
+import { MetricRegistry, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 export class IndexerServer {
 	private server: http.Server | null = null;
 	private readonly indexer: Indexer;
 	private readonly config: IndexerConfig;
+	private readonly metricRegistry = new MetricRegistry();
+	private readonly requestDuration = this.metricRegistry.histogram('http_request_duration_ms', 'HTTP request duration in milliseconds');
+	private readonly requestsTotal = this.metricRegistry.counter('http_requests_total', 'Total number of HTTP requests');
 
 	constructor(indexer: Indexer, config: IndexerConfig) {
 		this.indexer = indexer;
@@ -50,6 +54,18 @@ export class IndexerServer {
 	private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 		const method = req.method ?? 'GET';
+		const start = Date.now();
+		res.on('finish', () => {
+			const labels = { service: 'indexer', method, route: url.pathname, status: String(res.statusCode) };
+			this.requestDuration.observe(labels, Date.now() - start);
+			this.requestsTotal.inc(labels);
+		});
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			prometheusHandler(this.metricRegistry)(req, res);
+			return;
+		}
 
 		// GET /health — service status
 		if (method === 'GET' && url.pathname === '/health') {

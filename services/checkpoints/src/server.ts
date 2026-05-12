@@ -8,10 +8,15 @@ import type { Request, Response } from 'express';
 import { CheckpointManager } from './checkpointManager.js';
 import { CheckpointStorage } from './storage.js';
 import type { CheckpointCreateRequest } from './types.js';
+import { MetricRegistry, expressMetricsMiddleware, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 export function createServer(manager: CheckpointManager): express.Express {
+	const registry = new MetricRegistry();
 	const app = express();
 	app.use(express.json());
+	app.use(expressMetricsMiddleware(registry, 'checkpoints'));
+
+	app.get('/metrics', prometheusHandler(registry) as (req: Request, res: Response) => void);
 
 	app.get('/health', (_req: Request, res: Response) => {
 		res.json({ status: 'ok', service: 'checkpoints' });
@@ -61,8 +66,7 @@ export function createServer(manager: CheckpointManager): express.Express {
 	app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
 		try {
 			const { sessionId } = req.params;
-const { sessionId } = req.params;
-await manager.deleteSession(sessionId);
+			await manager.deleteSession(sessionId);
 			res.json({ deleted: true, sessionId });
 		} catch (err) {
 			res.status(500).json({ error: String(err) });

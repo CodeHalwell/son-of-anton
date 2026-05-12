@@ -39,7 +39,7 @@ export class ZapClient {
 			maxChildren: '10',
 			recurse: 'true',
 		});
-		return result?.scan ?? '';
+		return String(result?.scan ?? '');
 	}
 
 	/**
@@ -52,7 +52,7 @@ export class ZapClient {
 			recurse: 'true',
 			inScopeOnly: 'true',
 		});
-		return result?.scan ?? '';
+		return String(result?.scan ?? '');
 	}
 
 	/**
@@ -63,7 +63,7 @@ export class ZapClient {
 		const result = await this.apiGet('/JSON/ascan/view/status/', {
 			scanId,
 		});
-		return parseInt(result?.status ?? '0', 10);
+		return parseInt(String(result?.status ?? '0'), 10);
 	}
 
 	/**
@@ -74,7 +74,7 @@ export class ZapClient {
 		const result = await this.apiGet('/JSON/spider/view/status/', {
 			scanId,
 		});
-		return parseInt(result?.status ?? '0', 10);
+		return parseInt(String(result?.status ?? '0'), 10);
 	}
 
 	/**

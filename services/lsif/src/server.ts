@@ -4,11 +4,15 @@
 import http from 'http';
 import { LsifPipeline } from './pipeline';
 import { LsifConfig } from './config';
+import { MetricRegistry, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 export class LsifServer {
 	private server: http.Server | null = null;
 	private readonly pipeline: LsifPipeline;
 	private readonly config: LsifConfig;
+	private readonly metricRegistry = new MetricRegistry();
+	private readonly requestDuration = this.metricRegistry.histogram('http_request_duration_ms', 'HTTP request duration in milliseconds');
+	private readonly requestsTotal = this.metricRegistry.counter('http_requests_total', 'Total number of HTTP requests');
 
 	constructor(pipeline: LsifPipeline, config: LsifConfig) {
 		this.pipeline = pipeline;
@@ -44,6 +48,18 @@ export class LsifServer {
 	private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 		const method = req.method ?? 'GET';
+		const start = Date.now();
+		res.on('finish', () => {
+			const labels = { service: 'lsif', method, route: url.pathname, status: String(res.statusCode) };
+			this.requestDuration.observe(labels, Date.now() - start);
+			this.requestsTotal.inc(labels);
+		});
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			prometheusHandler(this.metricRegistry)(req, res);
+			return;
+		}
 
 		// GET /health
 		if (method === 'GET' && url.pathname === '/health') {

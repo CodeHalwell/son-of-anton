@@ -10,6 +10,7 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
+import { MetricRegistry, expressMetricsMiddleware, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -117,9 +118,11 @@ export function createServer() {
 	let failoverConfig = loadFailoverConfig();
 	const router = new ModelRouter(config);
 	const metrics = new MetricsCollector();
+	const registry = new MetricRegistry();
 	const app = express();
 
 	app.use(express.json({ limit: '10mb' }));
+	app.use(expressMetricsMiddleware(registry, 'model-router'));
 
 	// Health endpoint
 	app.get('/health', (_req, res) => {
@@ -281,12 +284,15 @@ export function createServer() {
 		res.status(502).json({ error: lastError?.message ?? 'All providers failed' });
 	});
 
-	// Metrics endpoints
-	app.get('/metrics', (_req, res) => {
+	// Prometheus metrics endpoint (standard /metrics path)
+	app.get('/metrics', prometheusHandler(registry));
+
+	// JSON metrics endpoints (LLM-specific aggregated data)
+	app.get('/metrics/json', (_req, res) => {
 		res.json(metrics.getAggregated());
 	});
 
-	app.get('/metrics/recent', (req, res) => {
+	app.get('/metrics/json/recent', (req, res) => {
 		const count = parseInt(req.query.count as string, 10) || 10;
 		res.json(metrics.getRecent(count));
 	});

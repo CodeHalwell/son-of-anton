@@ -96,7 +96,7 @@ export class TreeSitterManager {
 
 		parser = new Parser();
 		const grammar = this.loadGrammar(language);
-		parser.setLanguage(grammar);
+		parser.setLanguage(grammar as Parser.Language);
 		this.parsers.set(language, parser);
 
 		return parser;

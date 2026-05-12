@@ -59,8 +59,8 @@ export class FileWatcher {
 			this.handleDelete(filePath);
 		});
 
-		this.watcher.on('error', (error: Error) => {
-			console.error('[watcher] Error:', error.message);
+		this.watcher.on('error', (err: unknown) => {
+			console.error('[watcher] Error:', err instanceof Error ? err.message : err);
 		});
 	}
 

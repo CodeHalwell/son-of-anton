@@ -6,17 +6,34 @@ import path from 'path';
 import { ACPClientImpl } from './client';
 import { AgentRegistry } from './registry/agentRegistry';
 import { ACPDispatcher } from './dispatcher';
+import { MetricRegistry, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 const PORT = parseInt(process.env.ACP_PORT ?? '3300', 10);
 const CONFIG_PATH = process.env.ACP_CONFIG_PATH
 	?? path.join(process.env.PROJECT_PATH ?? '/workspace', '.son-of-anton', 'agents', 'acp-agents.json');
 
-const registry = new AgentRegistry(CONFIG_PATH);
-const client = new ACPClientImpl(registry);
+const agentRegistry = new AgentRegistry(CONFIG_PATH);
+const client = new ACPClientImpl(agentRegistry);
 const dispatcher = new ACPDispatcher(client);
+const metricRegistry = new MetricRegistry();
+const metricsHandler = prometheusHandler(metricRegistry);
+const requestDuration = metricRegistry.histogram('http_request_duration_ms', 'HTTP request duration in milliseconds');
+const requestsTotal = metricRegistry.counter('http_requests_total', 'Total number of HTTP requests');
 
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	res.on('finish', () => {
+		const labels = { service: 'acp-client', method: req.method ?? 'UNKNOWN', route: url.pathname, status: String(res.statusCode) };
+		requestDuration.observe(labels, Date.now() - start);
+		requestsTotal.inc(labels);
+	});
+
+	// Prometheus metrics endpoint
+	if (url.pathname === '/metrics' && req.method === 'GET') {
+		metricsHandler(req, res);
+		return;
+	}
 
 	// Health endpoint
 	if (url.pathname === '/health') {
@@ -121,11 +138,11 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 async function start(): Promise<void> {
-	await registry.load();
+	await agentRegistry.load();
 	console.log(`[acp-client] Loaded ${(await client.listAgents()).length} agents from registry`);
 
 	// Watch config file for changes in the background
-	registry.startWatching().catch(err => {
+	agentRegistry.startWatching().catch(err => {
 		console.warn('[acp-client] Config file watch failed:', err.message);
 	});
 
