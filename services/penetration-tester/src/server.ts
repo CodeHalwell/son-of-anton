@@ -13,6 +13,7 @@ import { FalkorDbClient } from './clients/falkordbClient';
 import { toSarif } from './sarif';
 import { validateTargetUrl } from './config';
 import { OwaspCategory, PenTestConfig, ScanSession, TestResult } from './types';
+import { MetricRegistry, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 /**
  * HTTP server for the penetration testing service.
@@ -27,6 +28,9 @@ export class PenTestServer {
 	private readonly falkorDb: FalkorDbClient;
 	private readonly sessions = new Map<string, ScanSession>();
 	private server: http.Server | null = null;
+	private readonly metricRegistry = new MetricRegistry();
+	private readonly requestDuration = this.metricRegistry.histogram('http_request_duration_ms', 'HTTP request duration in milliseconds');
+	private readonly requestsTotal = this.metricRegistry.counter('http_requests_total', 'Total number of HTTP requests');
 
 	constructor(
 		config: PenTestConfig,
@@ -82,6 +86,12 @@ export class PenTestServer {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.port}`);
 		const method = req.method ?? 'GET';
 		const path = url.pathname;
+		const start = Date.now();
+		res.on('finish', () => {
+			const labels = { service: 'penetration-tester', method, route: path, status: String(res.statusCode) };
+			this.requestDuration.observe(labels, Date.now() - start);
+			this.requestsTotal.inc(labels);
+		});
 
 		// CORS headers for local development
 		res.setHeader('Access-Control-Allow-Origin', '*');
@@ -91,6 +101,11 @@ export class PenTestServer {
 		if (method === 'OPTIONS') {
 			res.writeHead(204);
 			res.end();
+			return;
+		}
+
+		if (method === 'GET' && path === '/metrics') {
+			prometheusHandler(this.metricRegistry)(req, res);
 			return;
 		}
 
@@ -144,7 +159,7 @@ export class PenTestServer {
 	 */
 	private async handleFullScan(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const body = await this.readBody(req);
-		const targetUrl = body.targetUrl ?? this.config.targetBaseUrl;
+		const targetUrl = (body.targetUrl as string | undefined) ?? this.config.targetBaseUrl;
 
 		if (!validateTargetUrl(targetUrl)) {
 			this.sendJson(res, 400, { error: 'Target URL must be localhost' });
@@ -167,8 +182,8 @@ export class PenTestServer {
 	 */
 	private async handleEndpointScan(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const body = await this.readBody(req);
-		const targetUrl = body.targetUrl ?? this.config.targetBaseUrl;
-		const endpointPath = body.endpoint;
+		const targetUrl = (body.targetUrl as string | undefined) ?? this.config.targetBaseUrl;
+		const endpointPath = body.endpoint as string | undefined;
 
 		if (!endpointPath) {
 			this.sendJson(res, 400, { error: 'Missing endpoint parameter' });
@@ -195,7 +210,7 @@ export class PenTestServer {
 	 */
 	private async handleOwaspScan(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const body = await this.readBody(req);
-		const targetUrl = body.targetUrl ?? this.config.targetBaseUrl;
+		const targetUrl = (body.targetUrl as string | undefined) ?? this.config.targetBaseUrl;
 		const category = body.category as OwaspCategory;
 
 		if (!category) {
@@ -223,7 +238,7 @@ export class PenTestServer {
 	 */
 	private async handleBaselineScan(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const body = await this.readBody(req);
-		const targetUrl = body.targetUrl ?? this.config.targetBaseUrl;
+		const targetUrl = (body.targetUrl as string | undefined) ?? this.config.targetBaseUrl;
 
 		if (!validateTargetUrl(targetUrl)) {
 			this.sendJson(res, 400, { error: 'Target URL must be localhost' });

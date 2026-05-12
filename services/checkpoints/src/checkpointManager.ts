@@ -54,7 +54,7 @@ export class CheckpointManager {
 				continue;
 			}
 			try {
-				content = await fs.readFile(absolutePath);
+				content = await fs.readFile(absolutePath, 'utf-8');
 				exists = true;
 				contentHash = crypto.createHash('sha256').update(content).digest('hex');
 				await this.storage.saveFileSnapshot(sessionId, contentHash, content);
@@ -127,6 +127,10 @@ export class CheckpointManager {
 
 	async getCheckpoint(sessionId: string, checkpointId: string): Promise<Checkpoint> {
 		return this.storage.loadCheckpoint(sessionId, checkpointId);
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		return this.storage.deleteSession(sessionId);
 	}
 
 	async cleanupExpiredSessions(): Promise<number> {

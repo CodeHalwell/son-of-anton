@@ -2,18 +2,23 @@ import express from 'express';
 import { WalkthroughGenerator } from './walkthroughGenerator.js';
 import { WalkthroughStorage } from './storage.js';
 import { WalkthroughGenerateRequest, WalkthroughRenderOptions } from './types.js';
+import { MetricRegistry, expressMetricsMiddleware, prometheusHandler } from '@son-of-anton/lib-metrics';
 
 export function createServer(options?: {
 	modelRouterUrl?: string;
 	storagePath?: string;
 }): express.Application {
+	const registry = new MetricRegistry();
 	const app = express();
 	app.use(express.json());
+	app.use(expressMetricsMiddleware(registry, 'walkthrough'));
 
 	const generator = new WalkthroughGenerator({
 		modelRouterUrl: options?.modelRouterUrl ?? process.env.MODEL_ROUTER_URL ?? 'http://localhost:3200',
 	});
 	const storage = new WalkthroughStorage(options?.storagePath ?? process.env.WALKTHROUGH_BASE_PATH);
+
+	app.get('/metrics', prometheusHandler(registry));
 
 	app.get('/health', (_req, res) => {
 		res.json({ status: 'ok', service: 'walkthrough' });

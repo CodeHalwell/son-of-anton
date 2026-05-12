@@ -10,6 +10,7 @@
 		"test": "node --test dist/test/*.js"
 	},
 	"dependencies": {
+		"@son-of-anton/lib-metrics": "file:../_lib/metrics",
 		"express": "^4.21.0",
 		"undici": "^6.21.0"
 	},

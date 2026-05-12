@@ -4,6 +4,7 @@
 import { QdrantClient as QdrantSDKClient } from '@qdrant/js-client-rest';
 
 export interface CodeChunkPayload {
+	[key: string]: unknown;
 	filePath: string;
 	chunkType: 'function' | 'class' | 'type' | 'import' | 'module' | 'block';
 	symbolName: string;
