@@ -8,14 +8,18 @@ import type { Request, Response } from 'express';
 import { CheckpointManager } from './checkpointManager.js';
 import { CheckpointStorage } from './storage.js';
 import type { CheckpointCreateRequest } from './types.js';
+import { expressMetricsMiddleware, prometheusHandler } from './serviceMetrics.js';
 
 export function createServer(manager: CheckpointManager): express.Express {
 	const app = express();
 	app.use(express.json());
+	app.use(expressMetricsMiddleware({ service: 'checkpoints' }));
 
 	app.get('/health', (_req: Request, res: Response) => {
 		res.json({ status: 'ok', service: 'checkpoints' });
 	});
+
+	app.get('/metrics', prometheusHandler());
 
 	app.post('/sessions/:sessionId/checkpoints', async (req: Request, res: Response) => {
 		try {

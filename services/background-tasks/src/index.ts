@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import Docker from 'dockerode';
 import { BackgroundTask, TaskConfig, TaskState, TaskStatus, ResourceLimits } from './types';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 const PORT = parseInt(process.env.BACKGROUND_TASKS_PORT ?? '8093', 10);
 const STATE_DIR = process.env.STATE_DIR ?? '/data/background';
@@ -400,7 +401,27 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 	});
 }
 
+function normalizeRoute(pathname: string): string {
+	if (/^\/tasks\/[^/]+\/cancel$/.test(pathname)) { return '/tasks/:taskId/cancel'; }
+	if (/^\/tasks\/[^/]+\/results$/.test(pathname)) { return '/tasks/:taskId/results'; }
+	if (/^\/tasks\/[^/]+$/.test(pathname)) { return '/tasks/:taskId'; }
+	return pathname;
+}
+
+const metricsHandler = prometheusHandler();
+
 const httpServer = http.createServer(async (req, res) => {
+	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	res.on('finish', () => {
+		recordHttpRequest('background-tasks', req.method ?? 'GET', normalizeRoute(url.pathname), res.statusCode, Date.now() - start);
+	});
+
+	if (url.pathname === '/metrics') {
+		metricsHandler(req, res);
+		return;
+	}
+
 	try {
 		await handleRequest(req, res);
 	} catch (err) {

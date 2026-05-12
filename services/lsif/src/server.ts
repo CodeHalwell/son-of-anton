@@ -4,11 +4,13 @@
 import http from 'http';
 import { LsifPipeline } from './pipeline';
 import { LsifConfig } from './config';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 export class LsifServer {
 	private server: http.Server | null = null;
 	private readonly pipeline: LsifPipeline;
 	private readonly config: LsifConfig;
+	private readonly metricsHandler = prometheusHandler();
 
 	constructor(pipeline: LsifPipeline, config: LsifConfig) {
 		this.pipeline = pipeline;
@@ -17,6 +19,12 @@ export class LsifServer {
 
 	start(): void {
 		this.server = http.createServer(async (req, res) => {
+			const start = Date.now();
+			const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
+			res.on('finish', () => {
+				const route = (url.pathname.startsWith('/run/') && url.pathname !== '/run') ? '/run/:language' : url.pathname;
+				recordHttpRequest('lsif', req.method ?? 'GET', route, res.statusCode, Date.now() - start);
+			});
 			try {
 				await this.handleRequest(req, res);
 			} catch (err) {
@@ -44,6 +52,12 @@ export class LsifServer {
 	private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const url = new URL(req.url ?? '/', `http://localhost:${this.config.server.port}`);
 		const method = req.method ?? 'GET';
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			this.metricsHandler(req, res);
+			return;
+		}
 
 		// GET /health
 		if (method === 'GET' && url.pathname === '/health') {

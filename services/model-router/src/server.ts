@@ -10,6 +10,7 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
+import { expressMetricsMiddleware, prometheusHandler } from './serviceMetrics.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -120,6 +121,7 @@ export function createServer() {
 	const app = express();
 
 	app.use(express.json({ limit: '10mb' }));
+	app.use(expressMetricsMiddleware({ service: 'model-router' }));
 
 	// Health endpoint
 	app.get('/health', (_req, res) => {
@@ -281,8 +283,11 @@ export function createServer() {
 		res.status(502).json({ error: lastError?.message ?? 'All providers failed' });
 	});
 
-	// Metrics endpoints
-	app.get('/metrics', (_req, res) => {
+	// Prometheus metrics endpoint (HTTP-level + LLM aggregates)
+	app.get('/metrics', prometheusHandler());
+
+	// JSON LLM metrics for backward compatibility / UI consumption
+	app.get('/metrics/json', (_req, res) => {
 		res.json(metrics.getAggregated());
 	});
 

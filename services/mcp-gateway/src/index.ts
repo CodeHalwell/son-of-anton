@@ -6,6 +6,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { FalkorDBClient } from './clients/falkordb';
 import { QdrantClient } from './clients/qdrant';
 import { createMcpServer } from './server';
+import { prometheusHandler, recordHttpRequest } from './serviceMetrics.js';
 
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 
@@ -17,8 +18,24 @@ const mcpServer = createMcpServer(db, qdrant);
 // Track active SSE transports for cleanup
 const activeTransports = new Map<string, SSEServerTransport>();
 
+const metricsHandler = prometheusHandler();
+
 const httpServer = http.createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+	const start = Date.now();
+	const method = req.method ?? 'GET';
+
+	res.on('finish', () => {
+		const route = ['/health', '/sse', '/messages', '/metrics'].includes(url.pathname)
+			? url.pathname : 'unknown';
+		recordHttpRequest('mcp-gateway', method, route, res.statusCode, Date.now() - start);
+	});
+
+	// Metrics endpoint
+	if (url.pathname === '/metrics') {
+		metricsHandler(req, res);
+		return;
+	}
 
 	// Health endpoint
 	if (url.pathname === '/health') {
