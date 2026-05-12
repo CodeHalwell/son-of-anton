@@ -98,6 +98,13 @@ export class CodeGraphBackend implements vscode.Disposable {
 	private lastSymbolCount: number | undefined;
 	private lastFileCount: number | undefined;
 	private lastFailureReason: string | undefined;
+	/**
+	 * Incremented on every `start()`. Surfaced as `--restart-token=` in the
+	 * MCP server entry so that `McpClient.diffServerConfigs` sees a changed
+	 * entry on restart and tears down + respawns its own child — without
+	 * this, restarting the probe leaves the production server stale.
+	 */
+	private restartToken = 0;
 
 	constructor(options: CodeGraphBackendOptions) {
 		this.options = options;
@@ -138,6 +145,10 @@ export class CodeGraphBackend implements vscode.Disposable {
 		this.killChild();
 		this.restartAttempt = 0;
 		this.lastFailureReason = undefined;
+		// Bump the token so any returned `McpServerEntry` has a stable but
+		// fresh `--restart-token=` arg; this lets McpClient detect a real
+		// config change and respawn its own child on every `start()`.
+		this.restartToken += 1;
 
 		const choice = this.resolveBackendChoice();
 		this.log(`backend=${choice} (resolved from setting)`);
@@ -156,7 +167,15 @@ export class CodeGraphBackend implements vscode.Disposable {
 				this.setState('docker');
 				return;
 			}
-			this.log('docker backend requested but no legacy stack detected — falling back to embedded');
+			// The user explicitly asked for docker. Silently switching to the
+			// embedded backend would contradict the setting; surface it as a
+			// failure with actionable guidance instead.
+			const reason =
+				"backend=docker but no legacy services/{indexer,lsif,mcp-gateway} stack found on ports " +
+				`${LEGACY_DOCKER_PORTS.join(', ')} — start the legacy stack or set sota.codeGraph.backend to 'auto' / 'embedded'`;
+			this.log(reason);
+			this.setState('failed', reason);
+			return;
 		}
 
 		if (choice === 'auto') {
@@ -193,19 +212,31 @@ export class CodeGraphBackend implements vscode.Disposable {
 
 	/**
 	 * Build an MCP server entry that the extension merges into the
-	 * effective `sota.mcp.servers` list. Returns `undefined` when the
-	 * backend is off or in `docker` mode (the user is expected to have
-	 * configured the legacy stack manually, so we don't double-register).
+	 * effective `sota.mcp.servers` list. Returns `undefined` unless the
+	 * embedded server has reached the `embedded` state (probe completed +
+	 * torn down) — otherwise McpClient could spawn a second child while the
+	 * probe is alive, double-binding the SQLite database. Also returns
+	 * `undefined` when the backend is off, failed, or in `docker` mode.
 	 */
 	getMcpServerEntry(): McpServerEntry | undefined {
-		if (this.state === 'off' || this.state === 'docker') {
+		if (this.state !== 'embedded') {
 			return undefined;
 		}
 		const serverEntry = this.serverEntryPath();
 		if (!serverEntry) {
 			return undefined;
 		}
-		const args: string[] = [serverEntry, '--backend=sqlite'];
+		return this.buildServerEntry(serverEntry);
+	}
+
+	/**
+	 * Build the spawn descriptor for the bundled MCP server. Shared between
+	 * the in-process probe (which we own) and the McpClient-owned production
+	 * child (which discovers us via `getMcpServerEntry()`). Both should run
+	 * the same CLI flags so the probe's startup behaviour is representative.
+	 */
+	private buildServerEntry(serverEntry: string): McpServerEntry {
+		const args: string[] = [serverEntry, '--backend=embedded'];
 		const indexRoot = this.resolveIndexRoot();
 		if (indexRoot) {
 			args.push(`--index-root=${indexRoot}`);
@@ -228,9 +259,16 @@ export class CodeGraphBackend implements vscode.Disposable {
 			}
 		}
 
+		// Pin a per-`start()` token so McpClient's config diff sees a real
+		// change on every restart() / indexWorkspace() and respawns its child
+		// instead of treating two consecutive entries as identical.
+		args.push(`--restart-token=${this.restartToken}`);
+
 		return {
 			name: 'code-graph',
-			command: 'node',
+			// `process.execPath` is the Node binary hosting the extension —
+			// always present, even on machines without a system `node`.
+			command: process.execPath,
 			args,
 			cwd: this.options.workspaceRoot ?? this.options.repoRoot,
 		};
@@ -326,16 +364,11 @@ export class CodeGraphBackend implements vscode.Disposable {
 			return;
 		}
 
-		const serverEntry = this.getMcpServerEntry();
-		if (!serverEntry) {
-			this.setState('failed', 'could not build server entry');
-			return;
-		}
-
-		this.log(`spawning: ${serverEntry.command} ${serverEntry.args?.join(' ') ?? ''}`);
-		const child = cp.spawn(serverEntry.command, serverEntry.args ?? [], {
-			cwd: serverEntry.cwd ?? this.options.repoRoot,
-			env: { ...process.env, ...serverEntry.env },
+		const probeEntry = this.buildServerEntry(entry);
+		this.log(`spawning: ${probeEntry.command} ${probeEntry.args?.join(' ') ?? ''}`);
+		const child = cp.spawn(probeEntry.command, probeEntry.args ?? [], {
+			cwd: probeEntry.cwd ?? this.options.repoRoot,
+			env: { ...process.env, ...probeEntry.env },
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		this.child = child;

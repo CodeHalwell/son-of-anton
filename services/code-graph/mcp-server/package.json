@@ -13,7 +13,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@son-of-anton/codegraph-napi": "file:../../../crates/sota-codegraph-napi"
   },
   "devDependencies": {
     "@types/node": "^22",

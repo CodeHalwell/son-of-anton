@@ -61,7 +61,9 @@ impl SqliteStore {
     }
 
     /// Insert many files inside a single transaction with a reused prepared statement.
-    /// Returns the new rowids in input order.
+    /// Returns the rowids in input order. Re-inserting an existing path is
+    /// idempotent and preserves the existing row id (important: symbols + edges
+    /// reference it; rotating the id would cascade-delete dependent data).
     pub fn upsert_files_batch(
         &mut self,
         files: impl IntoIterator<Item = FileNode>,
@@ -70,21 +72,27 @@ impl SqliteStore {
 
         let mut ids = Vec::new();
         {
-            let mut stmt = tx.prepare(
-                "INSERT OR REPLACE INTO files (path, language, content_hash, indexed_at)
-                 VALUES (?1, ?2, ?3, ?4)",
+            let mut insert = tx.prepare(
+                "INSERT INTO files (path, language, content_hash, indexed_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(path) DO UPDATE SET
+                     language = excluded.language,
+                     content_hash = excluded.content_hash,
+                     indexed_at = excluded.indexed_at",
             )?;
+            let mut select = tx.prepare("SELECT id FROM files WHERE path = ?1")?;
 
             for file in files {
                 let path_str = file.path.to_string_lossy().to_string();
                 let language_str = format!("{:?}", file.language);
-                stmt.execute(params![
+                insert.execute(params![
                     path_str,
                     language_str,
                     file.content_hash as i64,
                     now_secs()
                 ])?;
-                ids.push(FileId(tx.last_insert_rowid()));
+                let id: i64 = select.query_row(params![path_str], |row| row.get(0))?;
+                ids.push(FileId(id));
             }
         }
 
@@ -98,42 +106,66 @@ impl GraphStore for SqliteStore {
         let path_str = file.path.to_string_lossy().to_string();
         let language_str = format!("{:?}", file.language);
 
+        // ON CONFLICT(path) DO UPDATE preserves the existing row id so that
+        // symbols + edges referencing it stay valid across re-indexes. Plain
+        // INSERT OR REPLACE would rotate the id and cascade-delete dependents.
         self.conn.execute(
-            "INSERT OR REPLACE INTO files (path, language, content_hash, indexed_at)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO files (path, language, content_hash, indexed_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(path) DO UPDATE SET
+                 language = excluded.language,
+                 content_hash = excluded.content_hash,
+                 indexed_at = excluded.indexed_at",
             params![path_str, language_str, file.content_hash as i64, now_secs()],
         )?;
 
-        let id = self.conn.last_insert_rowid();
+        let id: i64 = self.conn.query_row(
+            "SELECT id FROM files WHERE path = ?1",
+            params![path_str],
+            |row| row.get(0),
+        )?;
         Ok(FileId(id))
     }
 
-    fn upsert_symbol(&mut self, _symbol: SymbolNode) -> Result<SymbolId, CodeGraphError> {
-        let name = _symbol.name;
-        let kind = format!("{:?}", _symbol.kind);
-        let file_id = _symbol.file_id.0;
-        let start_byte = _symbol.range.0;
-        let end_byte = _symbol.range.1;
-        let doc_string = _symbol.doc_string.clone();
+    fn upsert_symbol(&mut self, symbol: SymbolNode) -> Result<SymbolId, CodeGraphError> {
+        let name = symbol.name;
+        let kind = format!("{:?}", symbol.kind);
+        let file_id = symbol.file_id.0;
+        let start_byte = symbol.range.0 as i64;
+        let end_byte = symbol.range.1 as i64;
+        let doc_string = symbol.doc_string;
 
+        // Preserve the existing symbol id when (file_id, name, kind,
+        // start_byte) matches — otherwise `ON DELETE CASCADE` from the
+        // `embeddings` table wipes every cached embedding on every re-index.
         self.conn.execute(
-            "INSERT OR REPLACE INTO symbols (file_id, name, kind, start_byte, end_byte, docstring)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO symbols (file_id, name, kind, start_byte, end_byte, docstring)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(file_id, name, kind, start_byte) DO UPDATE SET
+                 end_byte = excluded.end_byte,
+                 docstring = excluded.docstring",
             params![file_id, name, kind, start_byte, end_byte, doc_string],
         )?;
 
-        let id = self.conn.last_insert_rowid();
+        let id: i64 = self.conn.query_row(
+            "SELECT id FROM symbols
+             WHERE file_id = ?1 AND name = ?2 AND kind = ?3 AND start_byte = ?4",
+            params![file_id, name, kind, start_byte],
+            |row| row.get(0),
+        )?;
         Ok(SymbolId(id))
     }
 
-    fn upsert_edge(&mut self, _edge: Edge) -> Result<(), CodeGraphError> {
-        let from_node = _edge.from_node.0;
-        let to_node = _edge.to_node.0;
-        let kind = format!("{:?}", _edge.kind);
+    fn upsert_edge(&mut self, edge: Edge) -> Result<(), CodeGraphError> {
+        let from_node = edge.from_node.0;
+        let to_node = edge.to_node.0;
+        let kind = format!("{:?}", edge.kind);
 
+        // Composite primary key — DO NOTHING is enough (no mutable columns).
         self.conn.execute(
-            "INSERT OR REPLACE INTO edges (from_node, to_node, kind)
-             VALUES (?1, ?2, ?3)",
+            "INSERT INTO edges (from_node, to_node, kind)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(from_node, to_node, kind) DO NOTHING",
             params![from_node, to_node, kind],
         )?;
 

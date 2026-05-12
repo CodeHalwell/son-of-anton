@@ -40,17 +40,62 @@ function parseArgs(argv: string[]): CliArgs {
       // Format: --provider-embedder=ENDPOINT|MODEL|DIMS[|API_KEY]
       const parts = arg.slice('--provider-embedder='.length).split('|');
       if (parts.length >= 3) {
-        out.embedder = {
-          kind: 'provider',
-          endpoint: parts[0]!,
-          model: parts[1]!,
-          dims: parseInt(parts[2]!, 10),
-          apiKey: parts[3],
-        };
+        const endpoint = parts[0]!.trim();
+        const model = parts[1]!.trim();
+        const dims = Number.parseInt(parts[2]!, 10);
+        if (!endpoint || !model) {
+          console.error(
+            '[codegraph] --provider-embedder requires non-empty ENDPOINT and MODEL; ignoring flag',
+          );
+        } else if (!Number.isInteger(dims) || dims <= 0) {
+          console.error(
+            `[codegraph] --provider-embedder DIMS must be a positive integer (got ${parts[2]}); ignoring flag`,
+          );
+        } else {
+          out.embedder = {
+            kind: 'provider',
+            endpoint,
+            model,
+            dims,
+            apiKey: parts[3],
+          };
+        }
+      } else {
+        console.error(
+          '[codegraph] --provider-embedder expects ENDPOINT|MODEL|DIMS[|API_KEY]; ignoring flag',
+        );
       }
     }
   }
   return out;
+}
+
+/**
+ * Thrown when a tool call's arguments don't match the contract. Caught one
+ * frame up so the caller can return an MCP `isError` result instead of a
+ * stringly-typed silent failure.
+ */
+class ToolInputError extends Error {}
+
+function requireString(args: Record<string, unknown>, key: string): string {
+  const v = args[key];
+  if (typeof v !== 'string' || v.length === 0) {
+    throw new ToolInputError(`argument '${key}' is required and must be a non-empty string`);
+  }
+  return v;
+}
+
+function optionalNumber(
+  args: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const v = args[key];
+  if (v === undefined || v === null) return fallback;
+  if (typeof v !== 'number' || !Number.isFinite(v)) {
+    throw new ToolInputError(`argument '${key}' must be a finite number`);
+  }
+  return v;
 }
 
 async function dispatch(
@@ -60,30 +105,30 @@ async function dispatch(
 ): Promise<unknown> {
   switch (name) {
     case 'semantic_search': {
-      const query = String(args['query'] ?? '');
-      const limit = Number(args['limit'] ?? 10);
+      const query = requireString(args, 'query');
+      const limit = optionalNumber(args, 'limit', 10);
       const scope = Array.isArray(args['scope']) ? (args['scope'] as string[]) : undefined;
       return await engine.semanticSearch(query, limit, scope);
     }
     case 'file_summary':
-      return engine.fileSummary(String(args['path']));
+      return engine.fileSummary(requireString(args, 'path'));
     case 'symbol_lookup': {
-      const query = String(args['query'] ?? '');
-      const limit = Number(args['limit'] ?? 20);
+      const query = requireString(args, 'query');
+      const limit = optionalNumber(args, 'limit', 20);
       return engine.symbolLookup(query, limit);
     }
     case 'dependency_traversal': {
-      const path = String(args['path'] ?? '');
-      const depth = Number(args['depth'] ?? 3);
+      const path = requireString(args, 'path');
+      const depth = optionalNumber(args, 'depth', 3);
       return engine.dependencyTraversal(path, depth);
     }
     case 'impact_analysis': {
-      const path = String(args['path'] ?? '');
-      const depth = Number(args['depth'] ?? 3);
+      const path = requireString(args, 'path');
+      const depth = optionalNumber(args, 'depth', 3);
       return engine.impactAnalysis(path, depth);
     }
     case 'find_references':
-      return engine.findReferences(String(args['name'] ?? ''));
+      return engine.findReferences(requireString(args, 'name'));
     default:
       throw new Error(`unknown tool: ${name}`);
   }

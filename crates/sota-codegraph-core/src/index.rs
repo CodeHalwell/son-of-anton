@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,8 +13,7 @@ use crate::embed::Embedder;
 use crate::error::CodeGraphError;
 use crate::parse::{detect_language, parse_file, ParsedFile, RawEdge};
 use crate::store::sqlite::SqliteStore;
-use crate::store::GraphStore;
-use crate::types::{Edge, FileId, NodeId, SymbolId};
+use crate::types::{Edge, FileId, FileNode, NodeId, SymbolId, SymbolNode};
 
 /// Summary statistics returned by `bulk_index`.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -37,20 +36,18 @@ pub fn bulk_index(
     let paths = collect_source_files(root);
     let existing_hashes = load_existing_hashes(store)?;
 
+    // Parallelise hashing across rayon so the initial scan doesn't block on
+    // the main thread for large repositories.
     let to_parse: Vec<PathBuf> = paths
-        .iter()
-        .filter(|p| {
-            let source = match std::fs::read_to_string(p) {
-                Ok(s) => s,
-                Err(_) => return false,
-            };
-            let hash = xxhash_rust::xxh3::xxh3_64(source.as_bytes());
-            existing_hashes
+        .par_iter()
+        .filter_map(|p| {
+            let source = std::fs::read(p).ok()?;
+            let hash = xxhash_rust::xxh3::xxh3_64(&source);
+            let unchanged = existing_hashes
                 .get(&p.to_string_lossy().to_string())
-                .map(|existing| *existing != hash)
-                .unwrap_or(true)
+                .is_some_and(|existing| *existing == hash);
+            if unchanged { None } else { Some(p.clone()) }
         })
-        .cloned()
         .collect();
 
     let skipped_unchanged = paths.len() - to_parse.len();
@@ -66,45 +63,53 @@ pub fn bulk_index(
     };
 
     // Persist files + symbols, building a name → symbol_id index for edge resolution.
+    // Wrap everything in a single transaction so we don't pay a disk sync per row.
     let mut symbol_by_name: HashMap<String, Vec<SymbolId>> = HashMap::new();
-    let mut file_by_path: HashMap<String, FileId> = HashMap::new();
     let mut deferred_edges: Vec<(FileId, RawEdge)> = Vec::new();
+    let mut required_names: HashSet<String> = HashSet::new();
 
+    let tx = store.conn.transaction()?;
     for pf in parsed {
-        let file_id = store.upsert_file(pf.file.clone())?;
-        file_by_path.insert(pf.file.path.to_string_lossy().to_string(), file_id);
+        let file_id = upsert_file_tx(&tx, &pf.file)?;
         stats.files += 1;
 
         for mut sym in pf.symbols {
             let name = sym.name.clone();
             sym.file_id = file_id;
-            let sid = store.upsert_symbol(sym)?;
+            let sid = upsert_symbol_tx(&tx, &sym)?;
             symbol_by_name.entry(name).or_default().push(sid);
             stats.symbols += 1;
         }
 
         for raw in pf.edges {
+            required_names.insert(raw.target_name.clone());
             deferred_edges.push((file_id, raw));
         }
     }
 
-    // Also pull every symbol in the database into the lookup map, so call edges
-    // can resolve against symbols indexed in previous runs.
-    extend_symbol_lookup(store, &mut symbol_by_name)?;
+    // Pull only the symbol names referenced by this batch of edges, instead of
+    // loading the entire symbols table into memory.
+    if !required_names.is_empty() {
+        extend_symbol_lookup_scoped(&tx, &mut symbol_by_name, &required_names)?;
+    }
 
     for (file_id, raw) in deferred_edges {
         let from_node = NodeId(file_id.0);
         if let Some(targets) = symbol_by_name.get(&raw.target_name) {
             for sid in targets {
-                store.upsert_edge(Edge {
-                    from_node,
-                    to_node: NodeId(sid.0),
-                    kind: raw.kind.clone(),
-                })?;
+                upsert_edge_tx(
+                    &tx,
+                    Edge {
+                        from_node,
+                        to_node: NodeId(sid.0),
+                        kind: raw.kind.clone(),
+                    },
+                )?;
                 stats.edges += 1;
             }
         }
     }
+    tx.commit()?;
 
     Ok(stats)
 }
@@ -121,30 +126,51 @@ pub fn index_one_file(
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
+    persist_parsed_file(store, parsed)
+}
 
-    let file_id = store.upsert_file(parsed.file.clone())?;
+/// Persist an already-parsed file's symbols and edges. Used by the watcher's
+/// debounce loop so that tree-sitter parsing happens *outside* the
+/// `SqliteStore` mutex.
+pub fn persist_parsed_file(
+    store: &mut SqliteStore,
+    parsed: ParsedFile,
+) -> Result<Option<FileId>, CodeGraphError> {
     let mut symbol_by_name: HashMap<String, Vec<SymbolId>> = HashMap::new();
+    let mut required_names: HashSet<String> = HashSet::new();
+    for raw in &parsed.edges {
+        required_names.insert(raw.target_name.clone());
+    }
+
+    let tx = store.conn.transaction()?;
+    let file_id = upsert_file_tx(&tx, &parsed.file)?;
 
     for mut sym in parsed.symbols {
         let name = sym.name.clone();
         sym.file_id = file_id;
-        let sid = store.upsert_symbol(sym)?;
+        let sid = upsert_symbol_tx(&tx, &sym)?;
         symbol_by_name.entry(name).or_default().push(sid);
     }
 
-    extend_symbol_lookup(store, &mut symbol_by_name)?;
+    if !required_names.is_empty() {
+        extend_symbol_lookup_scoped(&tx, &mut symbol_by_name, &required_names)?;
+    }
 
     for raw in parsed.edges {
         if let Some(targets) = symbol_by_name.get(&raw.target_name) {
             for sid in targets {
-                store.upsert_edge(Edge {
-                    from_node: NodeId(file_id.0),
-                    to_node: NodeId(sid.0),
-                    kind: raw.kind.clone(),
-                })?;
+                upsert_edge_tx(
+                    &tx,
+                    Edge {
+                        from_node: NodeId(file_id.0),
+                        to_node: NodeId(sid.0),
+                        kind: raw.kind.clone(),
+                    },
+                )?;
             }
         }
     }
+    tx.commit()?;
     Ok(Some(file_id))
 }
 
@@ -221,12 +247,20 @@ fn load_existing_hashes(
     Ok(out)
 }
 
-fn extend_symbol_lookup(
-    store: &SqliteStore,
+/// Look up only the named symbols we actually need for edge resolution, rather
+/// than slurping the entire `symbols` table into memory on every save.
+fn extend_symbol_lookup_scoped(
+    tx: &rusqlite::Transaction<'_>,
     map: &mut HashMap<String, Vec<SymbolId>>,
+    names: &HashSet<String>,
 ) -> Result<(), CodeGraphError> {
-    let mut stmt = store.conn.prepare("SELECT id, name FROM symbols")?;
-    let rows = stmt.query_map([], |row| {
+    if names.is_empty() {
+        return Ok(());
+    }
+    let placeholders = vec!["?"; names.len()].join(",");
+    let sql = format!("SELECT id, name FROM symbols WHERE name IN ({placeholders})");
+    let mut stmt = tx.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(names.iter()), |row| {
         let id: i64 = row.get(0)?;
         let name: String = row.get(1)?;
         Ok((SymbolId(id), name))
@@ -238,6 +272,89 @@ fn extend_symbol_lookup(
             entry.push(sid);
         }
     }
+    Ok(())
+}
+
+// ──────────────────────────── Transaction-bound upserts ────────────────────────────
+//
+// These mirror the `GraphStore` implementations on `SqliteStore` but operate
+// inside a `rusqlite::Transaction` so that batch persistence can wrap the entire
+// loop in a single transaction (a single fsync, instead of one per row).
+
+fn upsert_file_tx(
+    tx: &rusqlite::Transaction<'_>,
+    file: &FileNode,
+) -> Result<FileId, CodeGraphError> {
+    let path_str = file.path.to_string_lossy().to_string();
+    let language_str = format!("{:?}", file.language);
+    let indexed_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // ON CONFLICT(path) DO UPDATE preserves the existing row id — important
+    // because symbols / edges reference it. Plain INSERT OR REPLACE rotates the
+    // id and would cascade-delete every symbol on every re-index.
+    tx.execute(
+        "INSERT INTO files (path, language, content_hash, indexed_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(path) DO UPDATE SET
+             language = excluded.language,
+             content_hash = excluded.content_hash,
+             indexed_at = excluded.indexed_at",
+        rusqlite::params![path_str, language_str, file.content_hash as i64, indexed_at],
+    )?;
+    let id: i64 = tx.query_row(
+        "SELECT id FROM files WHERE path = ?1",
+        rusqlite::params![path_str],
+        |row| row.get(0),
+    )?;
+    Ok(FileId(id))
+}
+
+fn upsert_symbol_tx(
+    tx: &rusqlite::Transaction<'_>,
+    sym: &SymbolNode,
+) -> Result<SymbolId, CodeGraphError> {
+    let name = &sym.name;
+    let kind = format!("{:?}", sym.kind);
+    let file_id = sym.file_id.0;
+    let start_byte = sym.range.0 as i64;
+    let end_byte = sym.range.1 as i64;
+    let doc_string = sym.doc_string.as_deref();
+
+    // Preserve the existing row id when (file_id, name, kind, start_byte)
+    // matches — otherwise `ON DELETE CASCADE` from the `embeddings` table
+    // would wipe every cached embedding on every re-index.
+    tx.execute(
+        "INSERT INTO symbols (file_id, name, kind, start_byte, end_byte, docstring)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(file_id, name, kind, start_byte) DO UPDATE SET
+             end_byte = excluded.end_byte,
+             docstring = excluded.docstring",
+        rusqlite::params![file_id, name, kind, start_byte, end_byte, doc_string],
+    )?;
+    let id: i64 = tx.query_row(
+        "SELECT id FROM symbols
+         WHERE file_id = ?1 AND name = ?2 AND kind = ?3 AND start_byte = ?4",
+        rusqlite::params![file_id, name, kind, start_byte],
+        |row| row.get(0),
+    )?;
+    Ok(SymbolId(id))
+}
+
+fn upsert_edge_tx(tx: &rusqlite::Transaction<'_>, edge: Edge) -> Result<(), CodeGraphError> {
+    let from_node = edge.from_node.0;
+    let to_node = edge.to_node.0;
+    let kind = format!("{:?}", edge.kind);
+    // Edges have a composite primary key — ON CONFLICT DO NOTHING is enough,
+    // there's no mutable column to update.
+    tx.execute(
+        "INSERT INTO edges (from_node, to_node, kind)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(from_node, to_node, kind) DO NOTHING",
+        rusqlite::params![from_node, to_node, kind],
+    )?;
     Ok(())
 }
 
@@ -307,8 +424,6 @@ async fn debounce_loop(
     mut shutdown_rx: mpsc::Receiver<()>,
     store: Arc<Mutex<SqliteStore>>,
 ) {
-    use std::collections::HashSet;
-
     let mut pending: HashSet<PathBuf> = HashSet::new();
     let debounce = Duration::from_millis(200);
     let mut deadline: Option<tokio::time::Instant> = None;
@@ -331,9 +446,15 @@ async fn debounce_loop(
                 if deadline.is_some() => {
                 if !pending.is_empty() {
                     let batch: Vec<PathBuf> = pending.drain().collect();
+                    // Parse outside the store lock — tree-sitter is CPU-bound
+                    // and blocking the store mutex blocks every IDE-side query.
+                    let parsed: Vec<ParsedFile> = batch
+                        .iter()
+                        .filter_map(|p| parse_file(p).ok())
+                        .collect();
                     let mut guard = store.lock();
-                    for p in batch {
-                        let _ = index_one_file(&mut guard, &p);
+                    for pf in parsed {
+                        let _ = persist_parsed_file(&mut guard, pf);
                     }
                 }
                 deadline = None;

@@ -69,8 +69,10 @@ export class CodeGraphStatusBarItem implements vscode.Disposable {
 	}
 
 	private buildTooltip(stateLine: string): vscode.MarkdownString {
+		// The tooltip is static informational text — it contains no command
+		// URIs and no user-controlled HTML, so leave `isTrusted` at its
+		// default `false` to avoid broadening the command-URI risk surface.
 		const tip = new vscode.MarkdownString(undefined, true);
-		tip.isTrusted = true;
 		tip.appendMarkdown(`**Son of Anton — code graph**\n\n`);
 		tip.appendMarkdown(`State: ${stateLine}\n\n`);
 		if (this.backend.lastIndexedAt) {

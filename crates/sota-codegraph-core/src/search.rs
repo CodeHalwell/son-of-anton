@@ -79,9 +79,9 @@ pub fn nearest(
     }
 
     let ids: Vec<i64> = raw.iter().map(|(id, _)| id.0).collect();
-    let placeholders = std::iter::repeat_n("?", ids.len())
-        .collect::<Vec<_>>()
-        .join(",");
+    // `std::iter::repeat_n` is 1.82+; the project's MSRV is 1.75, so build the
+    // placeholder list directly.
+    let placeholders = vec!["?"; ids.len()].join(",");
     let sql = format!(
         "SELECT s.id, s.name, s.kind, s.start_byte, s.end_byte, f.path
          FROM symbols s JOIN files f ON f.id = s.file_id
@@ -145,11 +145,27 @@ pub async fn semantic_search(
     nearest(store, index, &qv, limit, scope)
 }
 
+/// Read just the requested byte range out of `path`, without slurping the
+/// whole file into memory — important for large or minified sources.
 fn read_snippet(path: &str, start: usize, end: usize) -> Option<String> {
-    let bytes = std::fs::read(path).ok()?;
-    let lo = start.min(bytes.len());
-    let hi = end.min(bytes.len());
-    Some(String::from_utf8_lossy(&bytes[lo..hi]).into_owned())
+    use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
+
+    if end <= start {
+        return Some(String::new());
+    }
+    let mut file = File::open(path).ok()?;
+    let file_len = file.metadata().ok()?.len() as usize;
+    let lo = start.min(file_len);
+    let hi = end.min(file_len);
+    let len = hi.saturating_sub(lo);
+    if len == 0 {
+        return Some(String::new());
+    }
+    file.seek(SeekFrom::Start(lo as u64)).ok()?;
+    let mut buf = vec![0u8; len];
+    file.read_exact(&mut buf).ok()?;
+    Some(String::from_utf8_lossy(&buf).into_owned())
 }
 
 // ──────────────────────────────── 2. file_summary ───────────────────────────────────

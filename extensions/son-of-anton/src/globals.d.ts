@@ -7,6 +7,8 @@
 declare var process: {
 	env: Record<string, string | undefined>;
 	platform: string;
+	/** Absolute path to the Node.js binary hosting the extension. */
+	execPath: string;
 	memoryUsage(): {
 		rss: number;
 		heapTotal: number;

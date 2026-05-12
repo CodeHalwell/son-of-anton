@@ -49,6 +49,28 @@ impl FalkorStore {
             .map_err(|e| CodeGraphError::Parse(format!("GRAPH.QUERY: {e}")))
     }
 
+    /// Run a parameterised Cypher query. Parameters are emitted via FalkorDB's
+    /// `CYPHER name=value` prefix, which the engine parses as values rather
+    /// than Cypher syntax — closing the injection vector that inlining
+    /// untrusted strings into a `format!`-built query opens.
+    async fn query(
+        &mut self,
+        cypher: &str,
+        params: &[(&str, Param<'_>)],
+    ) -> Result<Value, CodeGraphError> {
+        let q = if params.is_empty() {
+            cypher.to_string()
+        } else {
+            let prefix = params
+                .iter()
+                .map(|(k, v)| format!("{k}={}", v.encode()))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("CYPHER {prefix} {cypher}")
+        };
+        self.query_raw(&q).await
+    }
+
     async fn ensure_indexes(&mut self) -> Result<(), CodeGraphError> {
         // Create indexes once. CREATE INDEX is idempotent in FalkorDB when the
         // index already exists, so re-running is cheap.
@@ -68,14 +90,19 @@ impl FalkorStore {
     // ─────────────────────────────── Upserts ───────────────────────────────────
 
     pub async fn upsert_file(&mut self, file: &FileNode) -> Result<(), CodeGraphError> {
-        let path = escape(&file.path.to_string_lossy());
-        let lang = escape(&format!("{:?}", file.language));
-        let cypher = format!(
-            "MERGE (f:File {{path: '{path}'}}) \
-             SET f.language = '{lang}', f.content_hash = {hash}, f.indexed_at = timestamp()",
-            hash = file.content_hash as i64,
-        );
-        self.query_raw(&cypher).await?;
+        let path = file.path.to_string_lossy().to_string();
+        let lang = format!("{:?}", file.language);
+        let hash = file.content_hash as i64;
+        self.query(
+            "MERGE (f:File {path: $path}) \
+             SET f.language = $lang, f.content_hash = $hash, f.indexed_at = timestamp()",
+            &[
+                ("path", Param::Str(&path)),
+                ("lang", Param::Str(&lang)),
+                ("hash", Param::Int(hash)),
+            ],
+        )
+        .await?;
         Ok(())
     }
 
@@ -84,26 +111,29 @@ impl FalkorStore {
         file_path: &str,
         sym: &SymbolNode,
     ) -> Result<(), CodeGraphError> {
-        let fpath = escape(file_path);
-        let name = escape(&sym.name);
-        let kind = escape(&format!("{:?}", sym.kind));
-        let doc = sym.doc_string.as_deref().map(escape).unwrap_or_default();
-        let doc_clause = if doc.is_empty() {
-            "SET s.end_byte = $end".to_string()
+        let kind = format!("{:?}", sym.kind);
+        let start = sym.range.0 as i64;
+        let end = sym.range.1 as i64;
+        let cypher = if sym.doc_string.is_some() {
+            "MATCH (f:File {path: $fpath}) \
+             MERGE (f)-[:DEFINES]->(s:Symbol {name: $name, kind: $kind, start_byte: $start}) \
+             SET s.end_byte = $end, s.doc_string = $doc"
         } else {
-            format!("SET s.end_byte = $end, s.doc_string = '{doc}'")
+            "MATCH (f:File {path: $fpath}) \
+             MERGE (f)-[:DEFINES]->(s:Symbol {name: $name, kind: $kind, start_byte: $start}) \
+             SET s.end_byte = $end"
         };
-        let cypher = format!(
-            "MATCH (f:File {{path: '{fpath}'}}) \
-             MERGE (f)-[:DEFINES]->(s:Symbol {{name: '{name}', kind: '{kind}', start_byte: {start}}}) \
-             {doc_clause}",
-            start = sym.range.0,
-        );
-        // The $end placeholder above is a doc/readability artefact; FalkorDB
-        // GRAPH.QUERY doesn't accept parameters via plain `cmd("GRAPH.QUERY")`.
-        // Inline numeric values directly.
-        let cypher = cypher.replace("$end", &sym.range.1.to_string());
-        self.query_raw(&cypher).await?;
+        let mut params: Vec<(&str, Param<'_>)> = vec![
+            ("fpath", Param::Str(file_path)),
+            ("name", Param::Str(&sym.name)),
+            ("kind", Param::Str(&kind)),
+            ("start", Param::Int(start)),
+            ("end", Param::Int(end)),
+        ];
+        if let Some(doc) = sym.doc_string.as_deref() {
+            params.push(("doc", Param::Str(doc)));
+        }
+        self.query(cypher, &params).await?;
         Ok(())
     }
 
@@ -112,28 +142,31 @@ impl FalkorStore {
         from_file_path: &str,
         target_symbol_name: &str,
     ) -> Result<(), CodeGraphError> {
-        let from = escape(from_file_path);
-        let target = escape(target_symbol_name);
         // Matches every symbol with the target name (consistent with the SQLite
         // backend's name-based resolution).
-        let cypher = format!(
-            "MATCH (src:File {{path: '{from}'}}), (tgt:Symbol {{name: '{target}'}}) \
-             MERGE (src)-[:CALLS]->(tgt)"
-        );
-        self.query_raw(&cypher).await?;
+        self.query(
+            "MATCH (src:File {path: $from}), (tgt:Symbol {name: $target}) \
+             MERGE (src)-[:CALLS]->(tgt)",
+            &[
+                ("from", Param::Str(from_file_path)),
+                ("target", Param::Str(target_symbol_name)),
+            ],
+        )
+        .await?;
         Ok(())
     }
 
     // ─────────────────────────────── Tools ─────────────────────────────────────
 
     pub async fn file_summary(&mut self, path: &str) -> Result<FileSummary, CodeGraphError> {
-        let p = escape(path);
-        let cypher = format!(
-            "MATCH (f:File {{path: '{p}'}})-[:DEFINES]->(s:Symbol) \
-             RETURN f.language, s.name, s.kind, s.doc_string, s.start_byte, s.end_byte \
-             ORDER BY s.start_byte"
-        );
-        let value = self.query_raw(&cypher).await?;
+        let value = self
+            .query(
+                "MATCH (f:File {path: $path})-[:DEFINES]->(s:Symbol) \
+                 RETURN f.language, s.name, s.kind, s.doc_string, s.start_byte, s.end_byte \
+                 ORDER BY s.start_byte",
+                &[("path", Param::Str(path))],
+            )
+            .await?;
         let rows = decode_rows(&value)?;
 
         let mut language = String::new();
@@ -165,16 +198,20 @@ impl FalkorStore {
         query: &str,
         limit: usize,
     ) -> Result<Vec<SymbolMatch>, CodeGraphError> {
-        let q = escape(query);
-        let cypher = format!(
-            "MATCH (s:Symbol)<-[:DEFINES]-(f:File) \
-             WHERE s.name = '{q}' OR s.name CONTAINS '{q}' \
-             RETURN s.name, s.kind, f.path, s.start_byte, s.end_byte, \
-                    CASE WHEN s.name = '{q}' THEN 0 ELSE 1 END AS rank \
-             ORDER BY rank ASC, size(s.name) ASC \
-             LIMIT {limit}"
-        );
-        let value = self.query_raw(&cypher).await?;
+        let value = self
+            .query(
+                "MATCH (s:Symbol)<-[:DEFINES]-(f:File) \
+                 WHERE s.name = $q OR s.name CONTAINS $q \
+                 RETURN s.name, s.kind, f.path, s.start_byte, s.end_byte, \
+                        CASE WHEN s.name = $q THEN 0 ELSE 1 END AS rank \
+                 ORDER BY rank ASC, size(s.name) ASC \
+                 LIMIT $limit",
+                &[
+                    ("q", Param::Str(query)),
+                    ("limit", Param::Int(limit as i64)),
+                ],
+            )
+            .await?;
         let rows = decode_rows(&value)?;
         Ok(rows
             .into_iter()
@@ -200,13 +237,19 @@ impl FalkorStore {
         start_file: &str,
         max_depth: u32,
     ) -> Result<Vec<String>, CodeGraphError> {
-        let p = escape(start_file);
+        // `*1..N` is a path-pattern literal, not a value position — Cypher
+        // doesn't allow parameters there. The depth comes from a `u32` so
+        // there's no injection vector; we cap it to a sane upper bound to keep
+        // the query plan bounded.
+        let depth = max_depth.min(64);
         let cypher = format!(
-            "MATCH (start:File {{path: '{p}'}})-[:CALLS*1..{max_depth}]->(:Symbol)<-[:DEFINES]-(target:File) \
+            "MATCH (start:File {{path: $path}})-[:CALLS*1..{depth}]->(:Symbol)<-[:DEFINES]-(target:File) \
              RETURN DISTINCT target.path \
              ORDER BY target.path"
         );
-        let value = self.query_raw(&cypher).await?;
+        let value = self
+            .query(&cypher, &[("path", Param::Str(start_file))])
+            .await?;
         let rows = decode_rows(&value)?;
         Ok(rows
             .into_iter()
@@ -219,13 +262,15 @@ impl FalkorStore {
         target_file: &str,
         max_depth: u32,
     ) -> Result<Vec<String>, CodeGraphError> {
-        let p = escape(target_file);
+        let depth = max_depth.min(64);
         let cypher = format!(
-            "MATCH (caller:File)-[:CALLS*1..{max_depth}]->(:Symbol)<-[:DEFINES]-(target:File {{path: '{p}'}}) \
+            "MATCH (caller:File)-[:CALLS*1..{depth}]->(:Symbol)<-[:DEFINES]-(target:File {{path: $path}}) \
              RETURN DISTINCT caller.path \
              ORDER BY caller.path"
         );
-        let value = self.query_raw(&cypher).await?;
+        let value = self
+            .query(&cypher, &[("path", Param::Str(target_file))])
+            .await?;
         let rows = decode_rows(&value)?;
         Ok(rows
             .into_iter()
@@ -237,12 +282,13 @@ impl FalkorStore {
         &mut self,
         symbol_name: &str,
     ) -> Result<Vec<Reference>, CodeGraphError> {
-        let n = escape(symbol_name);
-        let cypher = format!(
-            "MATCH (src:File)-[r:CALLS]->(s:Symbol {{name: '{n}'}})<-[:DEFINES]-(tgt:File) \
-             RETURN src.path, s.name, tgt.path, 'Calls' AS kind"
-        );
-        let value = self.query_raw(&cypher).await?;
+        let value = self
+            .query(
+                "MATCH (src:File)-[r:CALLS]->(s:Symbol {name: $name})<-[:DEFINES]-(tgt:File) \
+                 RETURN src.path, s.name, tgt.path, 'Calls' AS kind",
+                &[("name", Param::Str(symbol_name))],
+            )
+            .await?;
         let rows = decode_rows(&value)?;
         Ok(rows
             .into_iter()
@@ -271,18 +317,15 @@ impl FalkorStore {
         if symbol_names.is_empty() {
             return Ok(Vec::new());
         }
-        let in_list = symbol_names
-            .iter()
-            .take(limit)
-            .map(|n| format!("'{}'", escape(n)))
-            .collect::<Vec<_>>()
-            .join(",");
-        let cypher = format!(
-            "MATCH (s:Symbol)<-[:DEFINES]-(f:File) \
-             WHERE s.name IN [{in_list}] \
-             RETURN s.name, s.kind, f.path, s.start_byte, s.end_byte"
-        );
-        let value = self.query_raw(&cypher).await?;
+        let names: Vec<&str> = symbol_names.iter().take(limit).map(String::as_str).collect();
+        let value = self
+            .query(
+                "MATCH (s:Symbol)<-[:DEFINES]-(f:File) \
+                 WHERE s.name IN $names \
+                 RETURN s.name, s.kind, f.path, s.start_byte, s.end_byte",
+                &[("names", Param::StrList(&names))],
+            )
+            .await?;
         let rows = decode_rows(&value)?;
         Ok(rows
             .into_iter()
@@ -317,9 +360,52 @@ impl FalkorStore {
 
 // ─────────────────────────── Helper conversions ───────────────────────────────
 
-/// Escape single quotes in a string for inline Cypher.
-fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('\'', "\\'")
+/// A Cypher value emitted in the `CYPHER name=value` prefix. FalkorDB parses
+/// these as values, not Cypher syntax, so the only place untrusted input
+/// matters is the literal encoding here.
+#[derive(Debug, Clone, Copy)]
+enum Param<'a> {
+    Str(&'a str),
+    Int(i64),
+    StrList(&'a [&'a str]),
+}
+
+impl Param<'_> {
+    fn encode(&self) -> String {
+        match self {
+            Param::Str(s) => encode_str(s),
+            Param::Int(i) => i.to_string(),
+            Param::StrList(xs) => {
+                let inner = xs.iter().map(|s| encode_str(s)).collect::<Vec<_>>().join(",");
+                format!("[{inner}]")
+            }
+        }
+    }
+}
+
+/// Encode a Rust string as a double-quoted Cypher string literal. Escapes
+/// every character that could otherwise terminate the literal or sneak in a
+/// control sequence.
+fn encode_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            // Strip other control characters rather than emit them — they
+            // have no valid meaning inside a code identifier or path and
+            // could carry through to a downstream consumer that mishandles
+            // them.
+            c if (c as u32) < 0x20 => {}
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// Convert a `GRAPH.QUERY` response into its rows array.
@@ -392,10 +478,24 @@ mod tests {
     }
 
     #[test]
-    fn escape_quotes() {
-        assert_eq!(escape("foo's bar"), "foo\\'s bar");
-        assert_eq!(escape("plain"), "plain");
-        assert_eq!(escape(r"back\slash"), r"back\\slash");
+    fn encode_str_quotes_and_escapes_specials() {
+        assert_eq!(encode_str("plain"), "\"plain\"");
+        assert_eq!(encode_str("with \"quotes\""), "\"with \\\"quotes\\\"\"");
+        assert_eq!(encode_str(r"back\slash"), "\"back\\\\slash\"");
+        assert_eq!(encode_str("line\nbreak"), "\"line\\nbreak\"");
+        // Control characters are stripped, not embedded.
+        assert_eq!(encode_str("ctrl\x01char"), "\"ctrlchar\"");
+    }
+
+    #[test]
+    fn param_encoding() {
+        assert_eq!(Param::Int(42).encode(), "42");
+        assert_eq!(Param::Str("foo'bar").encode(), "\"foo'bar\"");
+        let names = ["a", "b\""];
+        assert_eq!(
+            Param::StrList(&names[..]).encode(),
+            "[\"a\",\"b\\\"\"]"
+        );
     }
 
     /// Real integration test. Skipped unless `FALKORDB_URL` is set.
