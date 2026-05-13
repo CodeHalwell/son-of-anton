@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { app, BrowserWindow, clipboard, contentTracing, Display, Menu, MessageBoxOptions, MessageBoxReturnValue, Notification, OpenDevToolsOptions, OpenDialogOptions, OpenDialogReturnValue, powerMonitor, powerSaveBlocker, SaveDialogOptions, SaveDialogReturnValue, screen, shell, webContents } from 'electron';
 import { arch, cpus, freemem, loadavg, platform, release, totalmem, type } from 'os';
 import { promisify } from 'util';
@@ -499,8 +499,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		}
 
 		try {
-			const command = `osascript -e "do shell script \\"mkdir -p /usr/local/bin && ln -sf \'${target}\' \'${source}\'\\" with administrator privileges"`;
-			await promisify(exec)(command);
+			const script = `on run argv\ndo shell script "mkdir -p /usr/local/bin && ln -sf " & quoted form of (item 1 of argv) & " " & quoted form of (item 2 of argv) with administrator privileges\nend run`;
+			await promisify(execFile)('osascript', ['-e', script, target, source]);
 		} catch (error) {
 			throw new Error(localize('cantCreateBinFolder', "Unable to install the shell command '{0}'.", source));
 		}
@@ -528,8 +528,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 					}
 
 					try {
-						const command = `osascript -e "do shell script \\"rm \'${source}\'\\" with administrator privileges"`;
-						await promisify(exec)(command);
+						const script = `on run argv\ndo shell script "rm " & quoted form of (item 1 of argv) with administrator privileges\nend run`;
+						await promisify(execFile)('osascript', ['-e', script, source]);
 					} catch (error) {
 						throw new Error(localize('cantUninstall', "Unable to uninstall the shell command '{0}'.", source));
 					}

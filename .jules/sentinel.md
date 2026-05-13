@@ -12,3 +12,8 @@
 **Vulnerability:** Command injection was possible in `extensions/son-of-anton/src/personality/GitBlameEasterEgg.ts` where unvalidated file paths were directly interpolated into a `child_process.exec` shell command (`git blame --porcelain "${filePath}"`). A workspace path like `"; touch /tmp/pwned; #` would execute the payload.
 **Learning:** Even internal API data that seems safe like file paths from `vscode.Uri` can contain malicious shell metacharacters and should be treated as untrusted input.
 **Prevention:** Always refactor to `child_process.execFile` when executing binaries like git to bypass shell evaluation and safely pass arguments natively.
+
+## 2026-05-13 - Command Injection in nativeHostMainService
+**Vulnerability:** The `osascript` string execution used string interpolation in `src/vs/platform/native/electron-main/nativeHostMainService.ts` for installing/uninstalling shell commands, passing the `source` and `target` variables to `promisify(exec)`. An attacker who could influence the installation path could potentially inject shell commands.
+**Learning:** Even with an internal function like `installShellCommandWithPrivileges`, string interpolation for `do shell script` in `osascript` introduces command injection vectors that circumvent macOS administrator prompts.
+**Prevention:** Always use `child_process.execFile` with an AppleScript `on run argv ... end run` block and reference `quoted form of (item N of argv)` to safely execute shell commands with user-controlled paths.
