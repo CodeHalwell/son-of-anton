@@ -10,6 +10,7 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
+import { counter, histogram, expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -112,6 +113,13 @@ function buildEndpoint(config: ProviderConfig): string {
 		: `${config.baseUrl}/v1/chat/completions`;
 }
 
+const llmRequestTotal = counter('llm_requests_total', 'Total LLM requests by provider, model, agent role, and outcome');
+const llmRequestDuration = histogram('llm_request_duration_ms', 'LLM request end-to-end latency in milliseconds');
+const llmInputTokens = counter('llm_input_tokens_total', 'Total LLM input tokens consumed');
+const llmOutputTokens = counter('llm_output_tokens_total', 'Total LLM output tokens generated');
+const llmCacheReadTokens = counter('llm_cache_read_tokens_total', 'Total LLM tokens read from prompt cache');
+const llmCacheCreationTokens = counter('llm_cache_creation_tokens_total', 'Total LLM tokens written to prompt cache');
+
 export function createServer() {
 	const config = loadConfig();
 	let failoverConfig = loadFailoverConfig();
@@ -120,6 +128,7 @@ export function createServer() {
 	const app = express();
 
 	app.use(express.json({ limit: '10mb' }));
+	app.use(expressMetricsMiddleware('model-router'));
 
 	// Health endpoint
 	app.get('/health', (_req, res) => {
@@ -231,12 +240,21 @@ export function createServer() {
 					success: true,
 				});
 
+				const successLabels = { provider, model, agent_role: context.agentRole, outcome: 'success' };
+				llmRequestTotal.inc(successLabels);
+				llmRequestDuration.observe(latencyMs, successLabels);
+				llmInputTokens.inc({ provider, model, agent_role: context.agentRole }, unified.inputTokens);
+				llmOutputTokens.inc({ provider, model, agent_role: context.agentRole }, unified.outputTokens);
+				llmCacheReadTokens.inc({ provider, model, agent_role: context.agentRole }, unified.cachedTokens);
+				llmCacheCreationTokens.inc({ provider, model, agent_role: context.agentRole }, unified.cacheCreationTokens ?? 0);
+
 				res.json(unified);
 				return;
 
 			} catch (err) {
 				lastError = err as Error;
 				console.error(`Provider ${provider} failed:`, lastError.message);
+				const errLatencyMs = Date.now() - startTime;
 				metrics.record({
 					id: randomUUID(),
 					timestamp: Date.now(),
@@ -248,11 +266,14 @@ export function createServer() {
 					inputTokens: 0,
 					outputTokens: 0,
 					cachedTokens: 0,
-					latencyMs: Date.now() - startTime,
+					latencyMs: errLatencyMs,
 					cost: 0,
 					success: false,
 					error: lastError.message,
 				});
+				const errLabels = { provider, model, agent_role: context.agentRole, outcome: 'error' };
+				llmRequestTotal.inc(errLabels);
+				llmRequestDuration.observe(errLatencyMs, errLabels);
 				// Network / connection error — try next provider
 			}
 		}
@@ -278,11 +299,18 @@ export function createServer() {
 			error: lastError?.message,
 		});
 
+		const exhaustedLabels = { provider: lastProvider, model: lastModel, agent_role: context.agentRole, outcome: 'all_failed' };
+		llmRequestTotal.inc(exhaustedLabels);
+		llmRequestDuration.observe(latencyMs, exhaustedLabels);
+
 		res.status(502).json({ error: lastError?.message ?? 'All providers failed' });
 	});
 
-	// Metrics endpoints
-	app.get('/metrics', (_req, res) => {
+	// Prometheus metrics endpoint
+	app.get('/metrics', prometheusHandler() as any);
+
+	// Legacy JSON metrics (kept for backward compat with existing tooling)
+	app.get('/metrics/json', (_req, res) => {
 		res.json(metrics.getAggregated());
 	});
 

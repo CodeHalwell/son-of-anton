@@ -97,7 +97,7 @@ export class QdrantClient {
 			points: points.map(p => ({
 				id: p.id,
 				vector: p.vector,
-				payload: p.payload,
+				payload: p.payload as unknown as Record<string, unknown>,
 			})),
 		});
 	}

@@ -12,6 +12,7 @@ COPY package*.json tsconfig.json ./
 RUN npm ci
 
 COPY src/ ./src/
+COPY _lib/metrics/dist/ ./_lib/metrics/dist/
 RUN npx tsc
 
 EXPOSE 3300

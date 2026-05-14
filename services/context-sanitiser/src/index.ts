@@ -4,6 +4,7 @@
 import http from 'http';
 import { ContextSanitiser } from './sanitiser';
 import { WorkspaceScanner } from './scanner';
+import { prometheusHandler } from '../_lib/metrics/dist/index.js';
 
 const PORT = parseInt(process.env.SANITISER_PORT ?? '3302', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
@@ -85,6 +86,12 @@ const httpServer = http.createServer(async (req, res) => {
 		return;
 	}
 
+	// Prometheus metrics endpoint
+	if (url.pathname === '/metrics') {
+		prometheusHandler()(req, res);
+		return;
+	}
+
 	res.writeHead(404, { 'Content-Type': 'application/json' });
 	res.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -102,6 +109,7 @@ async function start(): Promise<void> {
 	httpServer.listen(PORT, () => {
 		console.log(`[context-sanitiser] Context sanitiser listening on port ${PORT}`);
 		console.log(`[context-sanitiser] Health endpoint: http://localhost:${PORT}/health`);
+		console.log(`[context-sanitiser] Metrics endpoint: http://localhost:${PORT}/metrics`);
 		console.log(`[context-sanitiser] Workspace: ${PROJECT_PATH}`);
 	});
 }

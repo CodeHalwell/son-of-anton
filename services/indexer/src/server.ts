@@ -4,6 +4,7 @@
 import http from 'http';
 import { Indexer } from './indexer';
 import { IndexerConfig } from './config';
+import { prometheusHandler } from '../_lib/metrics/dist/index.js';
 
 export class IndexerServer {
 	private server: http.Server | null = null;
@@ -135,6 +136,12 @@ export class IndexerServer {
 					message: err instanceof Error ? err.message : String(err),
 				}));
 			}
+			return;
+		}
+
+		// GET /metrics — Prometheus metrics
+		if (method === 'GET' && url.pathname === '/metrics') {
+			prometheusHandler()(req, res);
 			return;
 		}
 

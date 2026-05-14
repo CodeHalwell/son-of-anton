@@ -7,6 +7,7 @@ import { extractMakeDag } from './extractors/makeExtractor';
 import { extractDockerComposeDag } from './extractors/dockerComposeExtractor';
 import { DagStore } from './graph/dagStore';
 import type { ExtractionResult } from './types';
+import { prometheusHandler } from '../_lib/metrics/dist/index.js';
 
 const PORT = parseInt(process.env.BUILD_DAG_PORT ?? '3301', 10);
 const PROJECT_PATH = process.env.PROJECT_PATH ?? '/workspace';
@@ -135,6 +136,12 @@ const httpServer = http.createServer(async (req, res) => {
 		return;
 	}
 
+	// Prometheus metrics endpoint
+	if (url.pathname === '/metrics') {
+		prometheusHandler()(req, res);
+		return;
+	}
+
 	res.writeHead(404, { 'Content-Type': 'application/json' });
 	res.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -155,6 +162,7 @@ async function start(): Promise<void> {
 	httpServer.listen(PORT, () => {
 		console.log(`[build-dag] Build DAG service listening on port ${PORT}`);
 		console.log(`[build-dag] Health endpoint: http://localhost:${PORT}/health`);
+		console.log(`[build-dag] Metrics endpoint: http://localhost:${PORT}/metrics`);
 		console.log(`[build-dag] Project path: ${PROJECT_PATH}`);
 	});
 }

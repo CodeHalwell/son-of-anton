@@ -389,6 +389,7 @@ describe('Translators', () => {
 			inputTokens: 100,
 			outputTokens: 50,
 			cachedTokens: 20,
+			cacheCreationTokens: 0,
 			finishReason: 'end_turn',
 		});
 	});
@@ -414,6 +415,7 @@ describe('Translators', () => {
 			inputTokens: 80,
 			outputTokens: 30,
 			cachedTokens: 10,
+			cacheCreationTokens: 0,
 			finishReason: 'stop',
 		});
 	});
