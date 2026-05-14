@@ -1,0 +1,4 @@
+## 2025-02-23 - DOM Serialization vs HTML Attribute XSS
+**Vulnerability:** XSS vulnerability in webview contexts when using `div.innerHTML` for HTML escaping, due to failure to escape double quotes (`"`).
+**Learning:** `escapeHtml` functions that rely on DOM serialization (`div.textContent = str; return div.innerHTML;`) successfully escape `<` and `>`, but typically do NOT escape `"` or `'`. When the result is used within HTML attributes (e.g. `title="..."` or `data-field="..."`), an attacker can supply input containing `"` to break out of the attribute and inject executable XSS vectors (like `onload=alert(1)`).
+**Prevention:** In webviews, always implement custom `escapeHtml` functions using explicit regex-based string replacements covering all 5 special HTML characters (`&`, `<`, `>`, `"`, `'`) rather than relying on `innerHTML` serialization.
