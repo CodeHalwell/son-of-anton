@@ -37,7 +37,7 @@ export class ReviewAgent extends BaseAgent {
 			// specialist's work shouldn't ship if the reviewer was hedging.
 			const { text, tokenUsage } = await this.callLlm(
 				task.id,
-				this.defaultModel,
+				this.resolveModel(context.orchestratorModelHint),
 				systemPrompt,
 				userMessage,
 				context.onToken,

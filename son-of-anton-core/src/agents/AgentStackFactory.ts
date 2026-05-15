@@ -264,7 +264,11 @@ export function createAgentStack(deps: {
 		// rather than silently downgrading at activation.
 		const override = configStore?.get<string>(`sota.agents.${handle}.model`);
 		if (typeof override === 'string' && override.trim().length > 0) {
-			return { ...config, defaultModel: override.trim() as ModelId };
+			// `userPinnedModel: true` tells `BaseAgent.resolveModel` to
+			// honour this exact id even when the orchestrator's per-turn
+			// model hint would otherwise re-route the specialist to a
+			// subscription family for auth-sharing.
+			return { ...config, defaultModel: override.trim() as ModelId, userPinnedModel: true };
 		}
 		return config;
 	};

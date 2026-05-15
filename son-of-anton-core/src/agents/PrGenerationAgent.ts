@@ -50,7 +50,7 @@ export class PrGenerationAgent extends BaseAgent {
 
 			const { text, tokenUsage } = await this.callLlm(
 				task.id,
-				this.defaultModel,
+				this.resolveModel(context.orchestratorModelHint),
 				systemPrompt,
 				userMessage,
 				context.onToken,

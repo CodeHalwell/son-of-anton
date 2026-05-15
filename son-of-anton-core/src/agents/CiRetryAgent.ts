@@ -219,7 +219,7 @@ export class CiRetryAgent extends BaseAgent {
 
 		const { text, tokenUsage } = await this.callLlm(
 			taskId,
-			this.defaultModel,
+			this.resolveModel(context.orchestratorModelHint),
 			systemPrompt,
 			userMessage,
 			context.onToken,

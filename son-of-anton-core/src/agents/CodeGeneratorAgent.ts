@@ -68,7 +68,7 @@ export class CodeGeneratorAgent extends BaseAgent {
 			let liveText = '';
 			const result = await this.runToolLoop({
 				taskId: task.id,
-				model: this.defaultModel,
+				model: this.resolveModel(context.orchestratorModelHint),
 				systemPrompt,
 				systemPromptParts,
 				initialMessages,
@@ -168,7 +168,7 @@ export class CodeGeneratorAgent extends BaseAgent {
 	): Promise<SubtaskResult> {
 		const { text, tokenUsage } = await this.callLlm(
 			taskId,
-			this.defaultModel,
+			this.resolveModel(context.orchestratorModelHint),
 			systemPrompt,
 			userMessage,
 			context.onToken,

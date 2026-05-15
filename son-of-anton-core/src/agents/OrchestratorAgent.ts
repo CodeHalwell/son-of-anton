@@ -197,6 +197,10 @@ export class OrchestratorAgent extends BaseAgent {
 		}
 
 		const plan = this.parsePlan(planResponse, request.prompt);
+		// Stash the user's per-turn model pick so the eventual
+		// `/approve` (which carries no message) can pass it to
+		// dispatched specialists as `orchestratorModelHint`.
+		plan.orchestratorModel = request.modelOverride;
 		this.activePlan = plan;
 
 		structuredEmit?.({
@@ -680,6 +684,10 @@ export class OrchestratorAgent extends BaseAgent {
 
 		// `onToken` is omitted when no structured channel is wired (native chat
 		// participant flow), keeping the cheaper non-streaming LLM path.
+		// `orchestratorModelHint` carries the chat composer's per-turn pick
+		// (stashed on the plan when it was drafted) so specialists with
+		// un-pinned defaults can re-route to the same subscription family
+		// the user is signed into. See BaseAgent.resolveModel.
 		const context: AgentContext = {
 			instruction: subtask.instruction,
 			scopeFiles: subtask.scopeFiles,
@@ -688,6 +696,7 @@ export class OrchestratorAgent extends BaseAgent {
 			onToken: structuredEmit
 				? (token) => structuredEmit({ type: 'subtask-token', subtaskId: subtask.id, token })
 				: undefined,
+			orchestratorModelHint: this.activePlan?.orchestratorModel,
 		};
 
 		// Per-turn timeout (H9). Race the specialist's execute() against a

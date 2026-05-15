@@ -83,6 +83,19 @@ export interface AgentContext {
 	 * render live streaming inside the active subtask card.
 	 */
 	onToken?: (token: string) => void;
+	/**
+	 * The model the orchestrator chose for this turn (from the chat
+	 * composer's picker). When the user is signed into a subscription
+	 * family (`claude-code-*` / `codex-*`) but specialists' baseline
+	 * defaults point at direct-API models, BaseAgent.resolveModel uses
+	 * this hint to re-route the specialist to the same subscription
+	 * family — so a single sign-in covers the whole stack without the
+	 * user having to manually pin every specialist via settings.
+	 *
+	 * Pinned specialists (`AgentConfig.userPinnedModel === true`) ignore
+	 * the hint and stick to their pinned model.
+	 */
+	orchestratorModelHint?: ModelId;
 }
 
 /**
@@ -191,6 +204,68 @@ export abstract class BaseAgent {
 
 	get defaultModel(): ModelId {
 		return this.config.defaultModel;
+	}
+
+	/**
+	 * Resolve the effective model for a per-turn LLM call, applying
+	 * subscription-family propagation when appropriate.
+	 *
+	 * - When the user has explicitly pinned this specialist via
+	 *   `sota.agents.<handle>.model` (signalled by
+	 *   `config.userPinnedModel`), always returns `defaultModel`. The
+	 *   user's pin wins unconditionally.
+	 * - When the orchestrator's per-turn model hint is in the
+	 *   `claude-code-*` family AND this specialist's `defaultModel`
+	 *   is a direct-Anthropic model, returns the matching
+	 *   `claude-code-{opus,sonnet,haiku}` variant so the user's
+	 *   Claude Code subscription sign-in covers the subtask without
+	 *   a separate `ANTHROPIC_API_KEY`.
+	 * - When the orchestrator's hint is in the `codex-*` family AND
+	 *   the default is a direct-OpenAI model, returns the matching
+	 *   `codex-*` variant for the same reason.
+	 * - Otherwise returns the specialist's baseline `defaultModel`.
+	 *
+	 * Specialists should pass `context.orchestratorModelHint` from
+	 * their `execute(context)` entrypoint.
+	 */
+	protected resolveModel(orchestratorHint?: ModelId): ModelId {
+		const baseline = this.config.defaultModel;
+		if (this.config.userPinnedModel) {
+			return baseline;
+		}
+		if (!orchestratorHint) {
+			return baseline;
+		}
+		// Map direct-Anthropic baselines to claude-code-* when the
+		// orchestrator is on Claude Code. The mapping is intentionally
+		// narrow — only models in the direct-Anthropic provider get
+		// re-routed; OpenAI / foundry / bedrock baselines stay as-is.
+		if (orchestratorHint.startsWith('claude-code-')) {
+			if (baseline === 'opus' || baseline.startsWith('claude-opus')) {
+				return 'claude-code-opus';
+			}
+			if (baseline === 'sonnet' || baseline.startsWith('claude-sonnet') || baseline.startsWith('claude-3-7-sonnet') || baseline.startsWith('claude-3-5-sonnet') || baseline.startsWith('claude-3-sonnet')) {
+				return 'claude-code-sonnet';
+			}
+			if (baseline === 'haiku' || baseline.startsWith('claude-haiku') || baseline.startsWith('claude-3-5-haiku') || baseline.startsWith('claude-3-haiku')) {
+				return 'claude-code-haiku';
+			}
+		}
+		// Mirror for Codex / ChatGPT subscription path. The codex CLI
+		// exposes `gpt-5`, `gpt-5-mini`, and `gpt-5-codex` — map the
+		// matching direct-OpenAI baselines.
+		if (orchestratorHint.startsWith('codex-')) {
+			if (baseline === 'gpt-5' || baseline === 'gpt-4o' || baseline === 'gpt-4-1') {
+				return 'codex-gpt-5';
+			}
+			if (baseline === 'gpt-5-mini' || baseline === 'gpt-4o-mini' || baseline === 'gpt-4-1-mini' || baseline === 'gpt-4-1-nano') {
+				return 'codex-gpt-5-mini';
+			}
+			if (baseline === 'gpt-5-codex') {
+				return 'codex-gpt-5-codex';
+			}
+		}
+		return baseline;
 	}
 
 	/**

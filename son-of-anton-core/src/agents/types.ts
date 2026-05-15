@@ -149,6 +149,15 @@ export interface ExecutionPlan {
 	subtasks: Subtask[];
 	scopeDeclaration: ScopeDeclaration;
 	approved: boolean;
+	/**
+	 * The model the user picked in the chat composer when the plan
+	 * was drafted. Captured so `/approve` (which runs later with an
+	 * empty user message) can still tell dispatched specialists what
+	 * provider family the user is signed into. See
+	 * BaseAgent.resolveModel + AgentContext.orchestratorModelHint for
+	 * the propagation policy.
+	 */
+	orchestratorModel?: ModelId;
 }
 
 /**
@@ -175,6 +184,19 @@ export interface AgentConfig {
 	displayName: string;
 	description: string;
 	defaultModel: ModelId;
+	/**
+	 * `true` when `defaultModel` came from an explicit user setting
+	 * (`sota.agents.<handle>.model`) and should be honoured even when
+	 * the orchestrator is routing chat through a different provider
+	 * family. `false` (default) means `defaultModel` is the
+	 * AGENT_CONFIGS baseline, and the specialist may be re-routed via
+	 * BaseAgent.resolveModel(orchestratorHint) when the orchestrator's
+	 * picker selects a subscription-routed model (`claude-code-*` /
+	 * `codex-*`). Avoids the "every subtask fails because no API key
+	 * is configured for the specialist's hardcoded direct-API default"
+	 * cliff users hit when they only have a Claude Code subscription.
+	 */
+	readonly userPinnedModel?: boolean;
 	maxRetries: number;
 	slashCommands: SlashCommandConfig[];
 	/** Optional. Maximum wall-clock time per subtask invocation. Default 5 minutes. */

@@ -109,7 +109,11 @@ export class ModerniserAgent extends BaseAgent {
 		const systemPrompt = this.buildSystemPrompt(this.getRoleDescription());
 		const phasePrompt = this.buildPhasePrompt();
 
-		await this.streamToChat(stream, this.defaultModel, systemPrompt, phasePrompt);
+		// No AgentContext in the chat-request path — runPhase fires when the
+		// user types `@anton-moderniser` directly rather than as a dispatched
+		// subtask. Call `resolveModel()` with no hint so the specialist's
+		// pinned / default model applies unmodified.
+		await this.streamToChat(stream, this.resolveModel(), systemPrompt, phasePrompt);
 
 		stream.markdown('\n\n---\n\n');
 		stream.markdown(`Phase **${PHASE_LABELS[this.currentPhase]}** complete. `);
@@ -234,7 +238,7 @@ export class ModerniserAgent extends BaseAgent {
 
 		const { text, tokenUsage } = await this.callLlm(
 			context.parentTaskId,
-			this.defaultModel,
+			this.resolveModel(context.orchestratorModelHint),
 			systemPrompt,
 			phasePrompt,
 			context.onToken,
