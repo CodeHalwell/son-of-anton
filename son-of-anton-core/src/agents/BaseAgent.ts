@@ -229,7 +229,27 @@ export abstract class BaseAgent {
 	 * their `execute(context)` entrypoint.
 	 */
 	protected resolveModel(orchestratorHint?: ModelId): ModelId {
-		const baseline = this.config.defaultModel;
+		if (this.config.userPinnedModel) {
+			return this.config.defaultModel;
+		}
+		return this.resolveModelFor(this.config.defaultModel, orchestratorHint);
+	}
+
+	/**
+	 * Map an explicit `baseline` model id to the subscription-routed
+	 * equivalent suggested by the orchestrator's hint, ignoring the
+	 * specialist's own `defaultModel`. Used by specialists like
+	 * `CiRetryAgent.classifyFailures` that pin a specific cheap model
+	 * (e.g. `'haiku'` for cost reasons) rather than the
+	 * `defaultModel` — the propagation logic still needs to fire so
+	 * the cheap call doesn't break on a missing direct-API key.
+	 *
+	 * Honours `userPinnedModel` the same way as `resolveModel`: when
+	 * the user has explicitly pinned this specialist, the supplied
+	 * `baseline` is returned unchanged (because the user's pin signals
+	 * "I know what I'm doing, leave me alone").
+	 */
+	protected resolveModelFor(baseline: ModelId, orchestratorHint?: ModelId): ModelId {
 		if (this.config.userPinnedModel) {
 			return baseline;
 		}
@@ -240,14 +260,20 @@ export abstract class BaseAgent {
 		// orchestrator is on Claude Code. The mapping is intentionally
 		// narrow — only models in the direct-Anthropic provider get
 		// re-routed; OpenAI / foundry / bedrock baselines stay as-is.
+		//
+		// Unsuffixed legacy IDs (`claude-3-sonnet`, `claude-3-opus`,
+		// `claude-3-haiku`) use exact equality rather than `startsWith`
+		// so re-ordering the if-chain can't silently mis-route — e.g.
+		// `claude-3-haiku` `startsWith` would also match
+		// `claude-3-5-haiku` and the wrong branch wins on reorder.
 		if (orchestratorHint.startsWith('claude-code-')) {
-			if (baseline === 'opus' || baseline.startsWith('claude-opus')) {
+			if (baseline === 'opus' || baseline === 'claude-3-opus' || baseline.startsWith('claude-opus')) {
 				return 'claude-code-opus';
 			}
-			if (baseline === 'sonnet' || baseline.startsWith('claude-sonnet') || baseline.startsWith('claude-3-7-sonnet') || baseline.startsWith('claude-3-5-sonnet') || baseline.startsWith('claude-3-sonnet')) {
+			if (baseline === 'sonnet' || baseline === 'claude-3-sonnet' || baseline.startsWith('claude-sonnet') || baseline.startsWith('claude-3-7-sonnet') || baseline.startsWith('claude-3-5-sonnet')) {
 				return 'claude-code-sonnet';
 			}
-			if (baseline === 'haiku' || baseline.startsWith('claude-haiku') || baseline.startsWith('claude-3-5-haiku') || baseline.startsWith('claude-3-haiku')) {
+			if (baseline === 'haiku' || baseline === 'claude-3-haiku' || baseline.startsWith('claude-haiku') || baseline.startsWith('claude-3-5-haiku')) {
 				return 'claude-code-haiku';
 			}
 		}

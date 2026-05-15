@@ -2361,6 +2361,18 @@ export class ChatSession {
 			console.warn(`[chat] setSpecialistModelAndRetry: empty suggested model for ${handle}`);
 			return;
 		}
+		// Validate against the canonical ModelId registry. Without this,
+		// a malicious or buggy webview message could persist an arbitrary
+		// string into `sota.agents.<handle>.model` — broken settings
+		// surface later at `LlmClient.getModelId` as confusing
+		// HTTP/runtime errors rather than at the obvious write site here.
+		if (!Object.prototype.hasOwnProperty.call(MODEL_METADATA, suggestedModel)) {
+			console.warn(`[chat] setSpecialistModelAndRetry: rejected unknown model "${suggestedModel}" for ${handle}`);
+			this.postSystemMessage(
+				`Could not pin @${handle}: \`${suggestedModel}\` is not a known model id. Pick one from the Specialist Models tab in Settings.`,
+			);
+			return;
+		}
 		try {
 			await vscode.workspace
 				.getConfiguration()
@@ -2370,8 +2382,15 @@ export class ChatSession {
 			return;
 		}
 		this.postSpecialistModelsState();
+		// Settings reach the running agent stack on next construction.
+		// `AgentStackFactory.requireConfig` reads the configStore at
+		// agent-instance build time and caches it for the instance
+		// lifetime, so a re-approve in this same window is a no-op
+		// until the user reloads. Be explicit about that — silent
+		// no-op retries are exactly the failure mode this affordance
+		// is supposed to prevent.
 		this.postSystemMessage(
-			`@${handle} pinned to \`${suggestedModel}\`. Re-approve the plan to retry the failed subtask.`,
+			`@${handle} pinned to \`${suggestedModel}\`. Reload the window (Cmd+Shift+P → "Developer: Reload Window") so the new pin takes effect, then re-approve the plan to retry the failed subtask.`,
 		);
 	}
 

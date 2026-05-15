@@ -52,7 +52,7 @@ export class CiRetryAgent extends BaseAgent {
 			}
 
 			// Classify and fix failures
-			const failures = await this.classifyFailures(task.id, pipelineInfo.logs, context.onToken);
+			const failures = await this.classifyFailures(task.id, pipelineInfo.logs, context.onToken, context.orchestratorModelHint);
 			const allChanges = [];
 			let attempt = 0;
 
@@ -156,6 +156,7 @@ export class CiRetryAgent extends BaseAgent {
 		taskId: string,
 		logs: string,
 		onToken?: (token: string) => void,
+		orchestratorHint?: import('../llm/LlmClient').ModelId,
 	): Promise<CiFailure[]> {
 		if (!logs) {
 			return [{ type: 'unknown', stage: 'unknown', message: 'No failure logs available', logs: '' }];
@@ -171,9 +172,16 @@ export class CiRetryAgent extends BaseAgent {
 		// failure") get a stronger second pass before the orchestrator acts
 		// on the classification. Cheap because escalation only fires when
 		// the score crosses 0.5 — most logs classify cleanly on Haiku.
+		//
+		// `resolveModelFor('haiku', hint)` keeps the cost intent (cheap
+		// classifier) while still re-routing through the user's
+		// subscription family when one is active — without it a
+		// subscription-only user would hit "No Claude credentials" here
+		// before `generateFix` ever ran.
+		const classifierModel = this.resolveModelFor('haiku', orchestratorHint);
 		const { text } = await this.callLlm(
 			taskId,
-			'haiku',
+			classifierModel,
 			systemPrompt,
 			`Classify these CI failures:\n\n${logs.slice(0, 20000)}`,
 			onToken,
