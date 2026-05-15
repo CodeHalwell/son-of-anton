@@ -10,7 +10,7 @@ import {
 	type BrokerLike,
 	type FetchFn,
 } from '../src/providers/anthropic-oauth.js';
-import type { AgentEvent, UniformRequest } from '../src/providers/types.js';
+import type { AgentEvent, UniformRequest, UsageObserver } from '../src/providers/types.js';
 
 class FakeBroker implements BrokerLike {
 	tokensIssued = 0;
@@ -253,5 +253,50 @@ describe('AnthropicOAuthAdapter', () => {
 		const broker = new FakeBroker();
 		const adapter = makeAdapter(broker, () => Promise.reject(new Error('not called')));
 		assert.strictEqual(adapter.id, ANTHROPIC_OAUTH_PROVIDER_ID);
+	});
+
+	test('send calls usageObserver for every usage event with correct labels', async () => {
+		const broker = new FakeBroker();
+		const frames = [
+			'data: {"type":"message_start","message":{"id":"m","model":"claude-sonnet-4-6","usage":{"input_tokens":10,"cache_read_input_tokens":5}}}\n\n',
+			'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":20}}\n\n',
+		];
+		const { fetch } = fakeFetchOk(frames);
+
+		const recorded: Parameters<UsageObserver['recordUsage']>[0][] = [];
+		const observer: UsageObserver = { recordUsage: u => recorded.push(u) };
+
+		const adapter = new AnthropicOAuthAdapter({
+			broker,
+			baseUrl: 'https://example.test',
+			fetchFn: fetch,
+			userAgent: 'TestRunner/1',
+			usageObserver: observer,
+		});
+
+		for await (const _ of adapter.send({ ...baseRequest, agentRole: 'code' }, new AbortController().signal)) {
+			// consume
+		}
+
+		assert.deepStrictEqual(recorded, [
+			{
+				provider: 'anthropic-oauth',
+				model: 'claude-sonnet-4-6',
+				agentRole: 'code',
+				inputTokens: 10,
+				outputTokens: 0,
+				cacheCreationInputTokens: 0,
+				cacheReadInputTokens: 5,
+			},
+			{
+				provider: 'anthropic-oauth',
+				model: 'claude-sonnet-4-6',
+				agentRole: 'code',
+				inputTokens: 0,
+				outputTokens: 20,
+				cacheCreationInputTokens: 0,
+				cacheReadInputTokens: 0,
+			},
+		]);
 	});
 });

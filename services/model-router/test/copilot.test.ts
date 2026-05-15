@@ -11,7 +11,7 @@ import {
 	type BrokerLike,
 	type FetchFn,
 } from '../src/providers/copilot.js';
-import type { AgentEvent, UniformRequest } from '../src/providers/types.js';
+import type { AgentEvent, UniformRequest, UsageObserver } from '../src/providers/types.js';
 
 class FakeBroker implements BrokerLike {
 	tokensIssued = 0;
@@ -396,5 +396,47 @@ describe('CopilotAdapter', () => {
 		}
 		const headers = calls[0].init!.headers as Record<string, string>;
 		assert.strictEqual(headers['X-GitHub-Api-Version'], '2024-01-01');
+	});
+
+	test('send calls usageObserver for every usage event', async () => {
+		const broker = new FakeBroker();
+		const frames = [
+			'data: {"id":"c","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n',
+			'data: {"id":"c","model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hi"}}]}\n\n',
+			'data: {"id":"c","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+			'data: {"id":"c","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}\n\n',
+			'data: [DONE]\n\n',
+		];
+		const { fetch } = fakeFetchOk(frames);
+
+		const recorded: Parameters<UsageObserver['recordUsage']>[0][] = [];
+		const observer: UsageObserver = { recordUsage: u => recorded.push(u) };
+
+		const adapter = new CopilotAdapter({
+			broker,
+			baseUrl: 'https://copilot.test',
+			fetchFn: fetch,
+			userAgent: 'TestRunner/1',
+			editorVersion: 'TestEditor/9',
+			editorPluginVersion: 'test-plugin/2',
+			integrationId: 'test-int',
+			usageObserver: observer,
+		});
+
+		for await (const _ of adapter.send({ ...baseRequest, agentRole: 'orchestrator' }, new AbortController().signal)) {
+			// consume
+		}
+
+		assert.deepStrictEqual(recorded, [
+			{
+				provider: 'copilot',
+				model: 'gpt-4o',
+				agentRole: 'orchestrator',
+				inputTokens: 10,
+				outputTokens: 5,
+				cacheCreationInputTokens: 0,
+				cacheReadInputTokens: 0,
+			},
+		]);
 	});
 });

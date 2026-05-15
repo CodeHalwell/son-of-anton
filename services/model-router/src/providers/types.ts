@@ -81,6 +81,22 @@ export interface ModelDescriptor {
 }
 
 /**
+ * Receives token-usage data from a provider adapter on every `usage` event.
+ * Implementations record to Prometheus, cost accumulators, or test spies.
+ */
+export interface UsageObserver {
+	recordUsage(usage: {
+		readonly provider: string;
+		readonly model: string;
+		readonly agentRole: string;
+		readonly inputTokens: number;
+		readonly outputTokens: number;
+		readonly cacheCreationInputTokens: number;
+		readonly cacheReadInputTokens: number;
+	}): void;
+}
+
+/**
  * Every provider adapter implements this interface (§5.7 of the plan).
  * `send()` is an async generator so backpressure flows naturally up through
  * the router, IDE, and chat UI.

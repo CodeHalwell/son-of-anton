@@ -9,6 +9,7 @@ import type {
 	ProviderAdapter,
 	UniformMessage,
 	UniformRequest,
+	UsageObserver,
 } from './types.js';
 
 /** Provider identifier used in routing config and broker RPC. */
@@ -78,6 +79,7 @@ export interface CopilotAdapterOptions {
 	readonly userAgent?: string;
 	readonly fetchFn?: FetchFn;
 	readonly models?: readonly ModelDescriptor[];
+	readonly usageObserver?: UsageObserver;
 }
 
 interface ChatCompletionsToolCall {
@@ -152,6 +154,7 @@ export class CopilotAdapter implements ProviderAdapter {
 	private readonly userAgent: string;
 	private readonly fetchFn: FetchFn;
 	private readonly defaultModels: readonly ModelDescriptor[];
+	private readonly usageObserver: UsageObserver | undefined;
 
 	private cachedModels: readonly ModelDescriptor[] | undefined;
 	private cachedModelsToken: string | undefined;
@@ -165,6 +168,7 @@ export class CopilotAdapter implements ProviderAdapter {
 		this.userAgent = opts.userAgent ?? 'SonOfAnton/0.1.0';
 		this.fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
 		this.defaultModels = opts.models ?? DEFAULT_MODELS;
+		this.usageObserver = opts.usageObserver;
 	}
 
 	async isAvailable(): Promise<boolean> {
@@ -268,11 +272,33 @@ export class CopilotAdapter implements ProviderAdapter {
 				for (const ev of events) {
 					for (const out of translator.translate(ev)) {
 						yield out;
+						if (out.type === 'usage' && this.usageObserver) {
+							this.usageObserver.recordUsage({
+								provider: this.id,
+								model: req.model,
+								agentRole: req.agentRole ?? 'default',
+								inputTokens: out.inputTokens,
+								outputTokens: out.outputTokens,
+								cacheCreationInputTokens: out.cacheCreationInputTokens ?? 0,
+								cacheReadInputTokens: out.cacheReadInputTokens ?? 0,
+							});
+						}
 					}
 				}
 			}
 			for (const ev of translator.finalize()) {
 				yield ev;
+				if (ev.type === 'usage' && this.usageObserver) {
+					this.usageObserver.recordUsage({
+						provider: this.id,
+						model: req.model,
+						agentRole: req.agentRole ?? 'default',
+						inputTokens: ev.inputTokens,
+						outputTokens: ev.outputTokens,
+						cacheCreationInputTokens: ev.cacheCreationInputTokens ?? 0,
+						cacheReadInputTokens: ev.cacheReadInputTokens ?? 0,
+					});
+				}
 			}
 		} catch (err) {
 			if (signal.aborted) {
