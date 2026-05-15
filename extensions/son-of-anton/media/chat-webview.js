@@ -5773,10 +5773,120 @@
 			}
 			if (bodyEl && status === 'error' && message.error) {
 				bodyEl.textContent = message.error;
+				// Detect missing-credential failures and offer a one-click
+				// "switch to subscription model" affordance so users on a
+				// Claude Code / Codex subscription don't have to leave the
+				// chat to recover. Other failure types render the plain
+				// error body unchanged.
+				appendSubtaskCredentialFallback(card, message);
 			} else if (bodyEl && status === 'ok' && message.summary) {
 				bodyEl.textContent = message.summary;
 			}
 			messageList.scrollTop = messageList.scrollHeight;
+		}
+
+		/**
+		 * If a failed subtask's error string identifies a missing provider
+		 * credential, append a "Switch model" action area to the card with
+		 * a button that pins the specialist to the subscription-routed
+		 * equivalent of its current model (e.g. `sonnet` → `claude-code-sonnet`,
+		 * `gpt-4o-mini` → `codex-gpt-5-mini`). Google currently has no
+		 * subscription path, so the button is rendered disabled with a
+		 * tooltip pointing users at the API key settings.
+		 *
+		 * A secondary "Open settings" link is always rendered so users who
+		 * want a different model (or want to add a key) have a path that
+		 * doesn't require clicking through the auto-fallback.
+		 */
+		function appendSubtaskCredentialFallback(card, message) {
+			if (!card || !message || !message.error) return;
+			const bodyEl = card.querySelector('.sota-subtask-body');
+			if (!bodyEl) return;
+			// Idempotent: a status update on the same card must not stack a
+			// second action area on top of the first.
+			if (card.querySelector('.sota-subtask-action')) return;
+
+			const errorText = String(message.error || '');
+			// Pattern table. Order matters: the first match wins, so the
+			// generic "API key" / "credential" fallback sits last.
+			const PATTERNS = [
+				{
+					re: /No Claude credentials/i,
+					provider: 'anthropic',
+					suggestedModel: 'claude-code-sonnet',
+					buttonLabel: 'Use Claude Code subscription instead',
+				},
+				{
+					re: /No OpenAI credentials/i,
+					provider: 'openai',
+					suggestedModel: 'codex-gpt-5-mini',
+					buttonLabel: 'Use Codex CLI subscription instead',
+				},
+				{
+					re: /Google API key not configured/i,
+					provider: 'google',
+					suggestedModel: '',
+					buttonLabel: 'Use a different provider…',
+					disabledTooltip: 'No subscription path for Gemini — add an API key in Settings → API Configuration → Google Gemini',
+				},
+				{
+					re: /(?:API key|credentials?)\s+(?:missing|not configured|not set|required)/i,
+					provider: 'generic',
+					suggestedModel: '',
+					buttonLabel: 'Use a different provider…',
+					disabledTooltip: 'No subscription path detected — open Settings to add an API key or pick a different model.',
+				},
+			];
+			let match = null;
+			for (const entry of PATTERNS) {
+				if (entry.re.test(errorText)) {
+					match = entry;
+					break;
+				}
+			}
+			if (!match) return;
+
+			const specialistId = String(card.dataset.handle || message.assignee || '').trim();
+			if (!specialistId) return;
+			const subtaskId = String(card.dataset.subtaskId || message.subtaskId || '');
+
+			const action = document.createElement('div');
+			action.className = 'sota-subtask-action';
+
+			const switchBtn = document.createElement('button');
+			switchBtn.type = 'button';
+			switchBtn.className = 'sota-subtask-action-btn';
+			switchBtn.textContent = match.buttonLabel;
+			if (!match.suggestedModel) {
+				switchBtn.disabled = true;
+				if (match.disabledTooltip) {
+					switchBtn.title = match.disabledTooltip;
+				}
+			} else {
+				switchBtn.addEventListener('click', () => {
+					switchBtn.disabled = true;
+					vscode.postMessage({
+						type: 'setSpecialistModelAndRetry',
+						specialistId: specialistId,
+						handle: specialistId,
+						model: match.suggestedModel,
+						suggestedModel: match.suggestedModel,
+						subtaskId: subtaskId,
+					});
+				});
+			}
+			action.appendChild(switchBtn);
+
+			const settingsLink = document.createElement('button');
+			settingsLink.type = 'button';
+			settingsLink.className = 'sota-subtask-action-link';
+			settingsLink.textContent = 'Open settings';
+			settingsLink.addEventListener('click', () => {
+				openChatSettings();
+			});
+			action.appendChild(settingsLink);
+
+			bodyEl.appendChild(action);
 		}
 
 		/**

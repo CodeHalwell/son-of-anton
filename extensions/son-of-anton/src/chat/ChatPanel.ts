@@ -1764,6 +1764,9 @@ export class ChatSession {
 					case 'setSpecialistModel':
 						await this.handleSetSpecialistModel(message);
 						break;
+					case 'setSpecialistModelAndRetry':
+						await this.handleSetSpecialistModelAndRetry(message);
+						break;
 					case 'reloadWindow':
 						// Surfaced by the Specialist Models sub-tab's "Reload
 						// window to apply" button after the user has changed
@@ -2328,6 +2331,48 @@ export class ChatSession {
 			console.warn(`[chat] setSpecialistModel failed for ${handle}: ${err instanceof Error ? err.message : String(err)}`);
 		}
 		this.postSpecialistModelsState();
+	}
+
+	/**
+	 * Quick-action handler fired from the "Switch model" button on a
+	 * subtask-failure card when the error string identifies a missing
+	 * credential. Pins the failing specialist to the subscription-routed
+	 * equivalent of its current model (e.g. `sonnet` → `claude-code-sonnet`)
+	 * by writing `sota.agents.<handle>.model` at user scope, then surfaces a
+	 * system message prompting the user to re-approve the plan so the
+	 * orchestrator re-dispatches the failed subtask.
+	 *
+	 * We do NOT auto-retry: the orchestrator owns dispatch and the cleanest
+	 * recovery is for the user to re-approve the existing plan after the
+	 * pin lands.
+	 */
+	private async handleSetSpecialistModelAndRetry(message: WebviewMessage): Promise<void> {
+		const rawHandle = typeof message.specialistId === 'string' && message.specialistId.length > 0
+			? message.specialistId
+			: typeof message.handle === 'string' ? message.handle : '';
+		const handle = rawHandle.trim();
+		const known = ChatSession.SPECIALIST_MODEL_ENTRIES.some(e => e.handle === handle);
+		if (!known) {
+			console.warn(`[chat] setSpecialistModelAndRetry: unknown specialist handle "${handle}"`);
+			return;
+		}
+		const suggestedModel = typeof message.model === 'string' ? message.model.trim() : '';
+		if (suggestedModel.length === 0) {
+			console.warn(`[chat] setSpecialistModelAndRetry: empty suggested model for ${handle}`);
+			return;
+		}
+		try {
+			await vscode.workspace
+				.getConfiguration()
+				.update(`sota.agents.${handle}.model`, suggestedModel, vscode.ConfigurationTarget.Global);
+		} catch (err) {
+			console.warn(`[chat] setSpecialistModelAndRetry failed for ${handle}: ${err instanceof Error ? err.message : String(err)}`);
+			return;
+		}
+		this.postSpecialistModelsState();
+		this.postSystemMessage(
+			`@${handle} pinned to \`${suggestedModel}\`. Re-approve the plan to retry the failed subtask.`,
+		);
 	}
 
 	private async handleSettingChange(message: WebviewMessage): Promise<void> {

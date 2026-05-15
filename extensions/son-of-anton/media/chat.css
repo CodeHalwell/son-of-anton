@@ -2744,6 +2744,53 @@ button {
 	display: none;
 }
 
+/* Quick-action footer appended to subtask failure cards when the error
+ * matches a missing-credential pattern. Lets the user pin the failing
+ * specialist to a subscription-routed model in one click without leaving
+ * the chat. */
+.sota-subtask-action {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-top: 8px;
+}
+
+.sota-subtask-action-btn {
+	font: inherit;
+	font-size: 12px;
+	padding: 4px 10px;
+	border-radius: 4px;
+	border: 1px solid var(--vscode-button-border, transparent);
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	cursor: pointer;
+}
+
+.sota-subtask-action-btn:hover:not(:disabled) {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+.sota-subtask-action-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.sota-subtask-action-link {
+	font: inherit;
+	font-size: 12px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--vscode-textLink-foreground);
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+.sota-subtask-action-link:hover {
+	color: var(--vscode-textLink-activeForeground);
+}
+
 /* Phase 81 — tree-shaped indentation under the orchestrator's message
  * body. Each `.sota-subtask-card` is wrapped in a `.subtask-tree-row`
  * that places the Unicode tree-connector glyph (`├─` for non-last,
