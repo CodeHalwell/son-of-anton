@@ -10,7 +10,8 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
-import { counter, histogram, expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
+import { counter, gauge, histogram, expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
+import { passthroughCollectUsage } from './streamingMetrics.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -119,6 +120,7 @@ const llmInputTokens = counter('llm_input_tokens_total', 'Total LLM input tokens
 const llmOutputTokens = counter('llm_output_tokens_total', 'Total LLM output tokens generated');
 const llmCacheReadTokens = counter('llm_cache_read_tokens_total', 'Total LLM tokens read from prompt cache');
 const llmCacheCreationTokens = counter('llm_cache_creation_tokens_total', 'Total LLM tokens written to prompt cache');
+const llmCacheHitRate = gauge('llm_cache_hit_rate', 'Per-request prompt cache hit rate (cache_read_tokens / input_tokens); last request wins per label set');
 
 export function createServer() {
 	const config = loadConfig();
@@ -196,10 +198,25 @@ export function createServer() {
 					try {
 						const body = fetchResponse.body as unknown as AsyncIterable<Buffer> | null;
 						if (body) {
-							for await (const chunk of body) {
+							const usageLabels = { provider, model, agent_role: context.agentRole };
+							for await (const chunk of passthroughCollectUsage(body, usage => {
+								llmInputTokens.inc(usageLabels, usage.inputTokens);
+								llmOutputTokens.inc(usageLabels, usage.outputTokens);
+								llmCacheReadTokens.inc(usageLabels, usage.cacheReadInputTokens);
+								llmCacheCreationTokens.inc(usageLabels, usage.cacheCreationInputTokens);
+								if (usage.inputTokens > 0) {
+									llmCacheHitRate.set(
+										usage.cacheReadInputTokens / usage.inputTokens,
+										usageLabels,
+									);
+								}
+							})) {
 								res.write(chunk);
 							}
 						}
+						const streamSuccessLabels = { provider, model, agent_role: context.agentRole, outcome: 'success' };
+						llmRequestTotal.inc(streamSuccessLabels);
+						llmRequestDuration.observe(Date.now() - startTime, streamSuccessLabels);
 						res.end();
 						return;
 					} catch (streamErr) {
