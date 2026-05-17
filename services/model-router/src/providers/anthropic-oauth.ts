@@ -9,6 +9,7 @@ import type {
 	UniformMessage,
 	UniformRequest,
 	UniformTool,
+	UsageObserver,
 } from './types.js';
 
 /** Anthropic API version pinned to a known-good release. */
@@ -66,6 +67,7 @@ export interface AnthropicOAuthAdapterOptions {
 	readonly userAgent?: string;
 	readonly fetchFn?: FetchFn;
 	readonly models?: readonly ModelDescriptor[];
+	readonly usageObserver?: UsageObserver;
 }
 
 interface AnthropicContentBlock {
@@ -117,6 +119,7 @@ export class AnthropicOAuthAdapter implements ProviderAdapter {
 	private readonly userAgent: string;
 	private readonly fetchFn: FetchFn;
 	private readonly models: readonly ModelDescriptor[];
+	private readonly usageObserver: UsageObserver | undefined;
 
 	constructor(opts: AnthropicOAuthAdapterOptions) {
 		this.broker = opts.broker;
@@ -124,6 +127,7 @@ export class AnthropicOAuthAdapter implements ProviderAdapter {
 		this.userAgent = opts.userAgent ?? 'SonOfAnton/0.1.0';
 		this.fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
 		this.models = opts.models ?? DEFAULT_MODELS;
+		this.usageObserver = opts.usageObserver;
 	}
 
 	async isAvailable(): Promise<boolean> {
@@ -211,6 +215,17 @@ export class AnthropicOAuthAdapter implements ProviderAdapter {
 				for (const ev of events) {
 					for (const out of translator.translate(ev as { type: string })) {
 						yield out;
+						if (out.type === 'usage' && this.usageObserver) {
+							this.usageObserver.recordUsage({
+								provider: this.id,
+								model: req.model,
+								agentRole: req.agentRole ?? 'default',
+								inputTokens: out.inputTokens,
+								outputTokens: out.outputTokens,
+								cacheCreationInputTokens: out.cacheCreationInputTokens ?? 0,
+								cacheReadInputTokens: out.cacheReadInputTokens ?? 0,
+							});
+						}
 					}
 				}
 			}

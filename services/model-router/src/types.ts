@@ -60,6 +60,7 @@ export interface RequestMetrics {
 	inputTokens: number;
 	outputTokens: number;
 	cachedTokens: number;
+	cacheCreationTokens: number;
 	latencyMs: number;
 	cost: number;
 	success: boolean;
@@ -71,6 +72,10 @@ export interface AggregatedMetrics {
 	totalCost: number;
 	totalInputTokens: number;
 	totalOutputTokens: number;
+	totalCacheReadTokens: number;
+	totalCacheCreationTokens: number;
+	/** Fraction of input tokens served from cache: cacheRead / (input + cacheRead). NaN when both are zero. */
+	cacheHitRate: number;
 	byProvider: Record<string, { requests: number; cost: number; avgLatencyMs: number }>;
 	byModel: Record<string, { requests: number; cost: number; avgLatencyMs: number }>;
 	byAgentRole: Record<string, { requests: number; cost: number }>;

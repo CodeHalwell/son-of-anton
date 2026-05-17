@@ -10,7 +10,7 @@ import {
 	type BrokerLike,
 	type FetchFn,
 } from '../src/providers/chatgpt-oauth.js';
-import type { AgentEvent, UniformRequest } from '../src/providers/types.js';
+import type { AgentEvent, UniformRequest, UsageObserver } from '../src/providers/types.js';
 
 class FakeBroker implements BrokerLike {
 	tokensIssued = 0;
@@ -345,5 +345,43 @@ describe('ChatGPTOAuthAdapter', () => {
 		const headers = calls[0].init!.headers as Record<string, string>;
 		assert.strictEqual(headers['X-Session'], 'abc');
 		assert.strictEqual(headers['OpenAI-Beta'], 'override');
+	});
+
+	test('send calls usageObserver for every usage event with correct labels', async () => {
+		const broker = new FakeBroker();
+		const frames = [
+			'event: response.created\n' +
+			'data: {"type":"response.created","response":{"id":"r","model":"gpt-5-codex"}}\n\n',
+			'event: response.completed\n' +
+			'data: {"type":"response.completed","response":{"id":"r","model":"gpt-5-codex","usage":{"input_tokens":20,"output_tokens":8}}}\n\n',
+		];
+		const { fetch } = fakeFetchOk(frames);
+
+		const recorded: Parameters<UsageObserver['recordUsage']>[0][] = [];
+		const observer: UsageObserver = { recordUsage: u => recorded.push(u) };
+
+		const adapter = new ChatGPTOAuthAdapter({
+			broker,
+			baseUrl: 'https://example.test/codex',
+			fetchFn: fetch,
+			userAgent: 'TestRunner/1',
+			usageObserver: observer,
+		});
+
+		for await (const _ of adapter.send({ ...baseRequest, agentRole: 'orchestrator' }, new AbortController().signal)) {
+			// consume
+		}
+
+		assert.deepStrictEqual(recorded, [
+			{
+				provider: 'chatgpt-oauth',
+				model: 'gpt-5-codex',
+				agentRole: 'orchestrator',
+				inputTokens: 20,
+				outputTokens: 8,
+				cacheCreationInputTokens: 0,
+				cacheReadInputTokens: 0,
+			},
+		]);
 	});
 });

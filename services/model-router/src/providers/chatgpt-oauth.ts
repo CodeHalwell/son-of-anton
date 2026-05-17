@@ -9,6 +9,7 @@ import type {
 	ProviderAdapter,
 	UniformMessage,
 	UniformRequest,
+	UsageObserver,
 } from './types.js';
 
 /** Provider identifier used in routing config and broker RPC. */
@@ -68,6 +69,7 @@ export interface ChatGPTOAuthAdapterOptions {
 	readonly userAgent?: string;
 	readonly fetchFn?: FetchFn;
 	readonly models?: readonly ModelDescriptor[];
+	readonly usageObserver?: UsageObserver;
 }
 
 interface ResponsesInputContent {
@@ -126,6 +128,7 @@ export class ChatGPTOAuthAdapter implements ProviderAdapter {
 	private readonly userAgent: string;
 	private readonly fetchFn: FetchFn;
 	private readonly models: readonly ModelDescriptor[];
+	private readonly usageObserver: UsageObserver | undefined;
 
 	constructor(opts: ChatGPTOAuthAdapterOptions) {
 		this.broker = opts.broker;
@@ -133,6 +136,7 @@ export class ChatGPTOAuthAdapter implements ProviderAdapter {
 		this.userAgent = opts.userAgent ?? 'SonOfAnton/0.1.0';
 		this.fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
 		this.models = opts.models ?? DEFAULT_MODELS;
+		this.usageObserver = opts.usageObserver;
 	}
 
 	async isAvailable(): Promise<boolean> {
@@ -218,6 +222,17 @@ export class ChatGPTOAuthAdapter implements ProviderAdapter {
 				for (const ev of events) {
 					for (const out of translator.translate(ev as { type: string })) {
 						yield out;
+						if (out.type === 'usage' && this.usageObserver) {
+							this.usageObserver.recordUsage({
+								provider: this.id,
+								model: req.model,
+								agentRole: req.agentRole ?? 'default',
+								inputTokens: out.inputTokens,
+								outputTokens: out.outputTokens,
+								cacheCreationInputTokens: out.cacheCreationInputTokens ?? 0,
+								cacheReadInputTokens: out.cacheReadInputTokens ?? 0,
+							});
+						}
 					}
 				}
 			}
