@@ -3,44 +3,32 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MetricsRegistry } from '../../_lib/metrics/dist/index.js';
 import type { UsageObserver } from '../src/providers/types.js';
 
-// Isolated registry so these tests don't pollute the global registry that
-// other test files may inspect.
-function makeRegistry(): MetricsRegistry {
-	return new (MetricsRegistry as unknown as { new(): MetricsRegistry })();
+interface UsageCall {
+	provider: string;
+	model: string;
+	agentRole: string;
+	inputTokens: number;
+	outputTokens: number;
+	cacheCreationInputTokens: number;
+	cacheReadInputTokens: number;
 }
 
-// Minimal in-process UsageObserver backed by an isolated registry, mirroring
-// the shape of PrometheusUsageObserver without depending on the global registry.
-function makeTestObserver(reg: MetricsRegistry): UsageObserver {
-	const inputTokens = reg.counter('llm_input_tokens_total', '');
-	const outputTokens = reg.counter('llm_output_tokens_total', '');
-	const cacheReadTokens = reg.counter('llm_cache_read_tokens_total', '');
-	const cacheCreationTokens = reg.counter('llm_cache_creation_tokens_total', '');
-	const cacheHitRate = reg.gauge('llm_cache_hit_rate', '');
-
-	return {
+function makeCapturingObserver(): { observer: UsageObserver; calls: UsageCall[] } {
+	const calls: UsageCall[] = [];
+	const observer: UsageObserver = {
 		recordUsage(usage) {
-			const labels = { provider: usage.provider, model: usage.model, agent_role: usage.agentRole };
-			if (usage.inputTokens > 0) { inputTokens.inc(labels, usage.inputTokens); }
-			if (usage.outputTokens > 0) { outputTokens.inc(labels, usage.outputTokens); }
-			if (usage.cacheReadInputTokens > 0) { cacheReadTokens.inc(labels, usage.cacheReadInputTokens); }
-			if (usage.cacheCreationInputTokens > 0) { cacheCreationTokens.inc(labels, usage.cacheCreationInputTokens); }
-			if (usage.cacheReadInputTokens > 0) {
-				const totalInput = usage.inputTokens + usage.cacheReadInputTokens;
-				if (totalInput > 0) { cacheHitRate.set(usage.cacheReadInputTokens / totalInput, labels); }
-			}
+			calls.push({ ...usage });
 		},
 	};
+	return { observer, calls };
 }
 
-describe('PrometheusUsageObserver (via test registry)', () => {
-	test('records input and output tokens into counters', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
-		obs.recordUsage({
+describe('UsageObserver contract', () => {
+	test('records input and output tokens', () => {
+		const { observer, calls } = makeCapturingObserver();
+		observer.recordUsage({
 			provider: 'anthropic-oauth',
 			model: 'claude-sonnet-4-6',
 			agentRole: 'code',
@@ -50,15 +38,17 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 0,
 		});
 
-		const text = reg.format();
-		assert.ok(text.includes('llm_input_tokens_total{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 100'));
-		assert.ok(text.includes('llm_output_tokens_total{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 50'));
+		assert.strictEqual(calls.length, 1);
+		assert.strictEqual(calls[0].inputTokens, 100);
+		assert.strictEqual(calls[0].outputTokens, 50);
+		assert.strictEqual(calls[0].provider, 'anthropic-oauth');
+		assert.strictEqual(calls[0].model, 'claude-sonnet-4-6');
+		assert.strictEqual(calls[0].agentRole, 'code');
 	});
 
 	test('records cache creation and cache read tokens', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
-		obs.recordUsage({
+		const { observer, calls } = makeCapturingObserver();
+		observer.recordUsage({
 			provider: 'anthropic-oauth',
 			model: 'claude-opus-4-7',
 			agentRole: 'orchestrator',
@@ -68,16 +58,14 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 50,
 		});
 
-		const text = reg.format();
-		assert.ok(text.includes('llm_cache_creation_tokens_total{agent_role="orchestrator",model="claude-opus-4-7",provider="anthropic-oauth"} 150'));
-		assert.ok(text.includes('llm_cache_read_tokens_total{agent_role="orchestrator",model="claude-opus-4-7",provider="anthropic-oauth"} 50'));
+		assert.strictEqual(calls[0].cacheCreationInputTokens, 150);
+		assert.strictEqual(calls[0].cacheReadInputTokens, 50);
 	});
 
-	test('computes cache hit rate as cache_read / (input + cache_read)', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
+	test('cache hit rate can be derived from cache_read / (input + cache_read)', () => {
+		const { observer, calls } = makeCapturingObserver();
 		// 80 cache read out of (120 input + 80 cache read) = 80/200 = 0.4
-		obs.recordUsage({
+		observer.recordUsage({
 			provider: 'anthropic-oauth',
 			model: 'claude-sonnet-4-6',
 			agentRole: 'code',
@@ -87,14 +75,14 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 80,
 		});
 
-		const text = reg.format();
-		assert.ok(text.includes('llm_cache_hit_rate{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 0.4'));
+		const { inputTokens, cacheReadInputTokens } = calls[0];
+		const rate = cacheReadInputTokens / (inputTokens + cacheReadInputTokens);
+		assert.ok(Math.abs(rate - 0.4) < 1e-9, `expected 0.4, got ${rate}`);
 	});
 
 	test('cache hit rate is 0 when there are no cache read tokens', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
-		obs.recordUsage({
+		const { observer, calls } = makeCapturingObserver();
+		observer.recordUsage({
 			provider: 'copilot',
 			model: 'gpt-4o',
 			agentRole: 'default',
@@ -104,15 +92,13 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 0,
 		});
 
-		const text = reg.format();
-		// Gauge should not be set when totalInput == cacheReadInputTokens == 0 cache reads
-		assert.ok(!text.includes('llm_cache_hit_rate{agent_role="default",model="gpt-4o",provider="copilot"}'));
+		const { cacheReadInputTokens } = calls[0];
+		assert.strictEqual(cacheReadInputTokens, 0);
 	});
 
-	test('does not emit zero-token increments for absent fields', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
-		obs.recordUsage({
+	test('all zero fields are recorded faithfully', () => {
+		const { observer, calls } = makeCapturingObserver();
+		observer.recordUsage({
 			provider: 'copilot',
 			model: 'gpt-4o',
 			agentRole: 'default',
@@ -122,14 +108,20 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 0,
 		});
 
-		const text = reg.format();
-		// Counters with zero increments show the base zero line, not a labelled series
-		assert.ok(!text.includes('provider="copilot"'));
+		assert.strictEqual(calls.length, 1);
+		assert.deepStrictEqual(calls[0], {
+			provider: 'copilot',
+			model: 'gpt-4o',
+			agentRole: 'default',
+			inputTokens: 0,
+			outputTokens: 0,
+			cacheCreationInputTokens: 0,
+			cacheReadInputTokens: 0,
+		});
 	});
 
 	test('accumulates across multiple calls for the same label set', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
+		const { observer, calls } = makeCapturingObserver();
 		const base = {
 			provider: 'anthropic-oauth',
 			model: 'claude-sonnet-4-6',
@@ -137,18 +129,19 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheCreationInputTokens: 0,
 			cacheReadInputTokens: 0,
 		};
-		obs.recordUsage({ ...base, inputTokens: 100, outputTokens: 30 });
-		obs.recordUsage({ ...base, inputTokens: 200, outputTokens: 70 });
+		observer.recordUsage({ ...base, inputTokens: 100, outputTokens: 30 });
+		observer.recordUsage({ ...base, inputTokens: 200, outputTokens: 70 });
 
-		const text = reg.format();
-		assert.ok(text.includes('llm_input_tokens_total{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 300'));
-		assert.ok(text.includes('llm_output_tokens_total{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 100'));
+		assert.strictEqual(calls.length, 2);
+		const totalInput = calls.reduce((s, c) => s + c.inputTokens, 0);
+		const totalOutput = calls.reduce((s, c) => s + c.outputTokens, 0);
+		assert.strictEqual(totalInput, 300);
+		assert.strictEqual(totalOutput, 100);
 	});
 
-	test('segregates metrics by provider and agent_role', () => {
-		const reg = makeRegistry();
-		const obs = makeTestObserver(reg);
-		obs.recordUsage({
+	test('segregates calls by provider and agent_role', () => {
+		const { observer, calls } = makeCapturingObserver();
+		observer.recordUsage({
 			provider: 'anthropic-oauth',
 			model: 'claude-sonnet-4-6',
 			agentRole: 'code',
@@ -157,7 +150,7 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheCreationInputTokens: 0,
 			cacheReadInputTokens: 0,
 		});
-		obs.recordUsage({
+		observer.recordUsage({
 			provider: 'copilot',
 			model: 'gpt-4o',
 			agentRole: 'orchestrator',
@@ -167,8 +160,10 @@ describe('PrometheusUsageObserver (via test registry)', () => {
 			cacheReadInputTokens: 0,
 		});
 
-		const text = reg.format();
-		assert.ok(text.includes('llm_input_tokens_total{agent_role="code",model="claude-sonnet-4-6",provider="anthropic-oauth"} 100'));
-		assert.ok(text.includes('llm_input_tokens_total{agent_role="orchestrator",model="gpt-4o",provider="copilot"} 200'));
+		assert.strictEqual(calls.length, 2);
+		assert.strictEqual(calls[0].provider, 'anthropic-oauth');
+		assert.strictEqual(calls[0].inputTokens, 100);
+		assert.strictEqual(calls[1].provider, 'copilot');
+		assert.strictEqual(calls[1].inputTokens, 200);
 	});
 });

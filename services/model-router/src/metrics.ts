@@ -45,6 +45,9 @@ export class MetricsCollector {
 			totalCost: 0,
 			totalInputTokens: 0,
 			totalOutputTokens: 0,
+			totalCacheReadTokens: 0,
+			totalCacheCreationTokens: 0,
+			cacheHitRate: NaN,
 			byProvider: {},
 			byModel: {},
 			byAgentRole: {},
@@ -55,6 +58,8 @@ export class MetricsCollector {
 			result.totalCost += m.cost;
 			result.totalInputTokens += m.inputTokens;
 			result.totalOutputTokens += m.outputTokens;
+			result.totalCacheReadTokens += m.cachedTokens;
+			result.totalCacheCreationTokens += m.cacheCreationTokens;
 
 			// By provider
 			if (!result.byProvider[m.provider]) {
@@ -90,6 +95,11 @@ export class MetricsCollector {
 				result.byTaskType[m.taskType].cost += m.cost;
 			}
 		}
+
+		const totalTokensForRate = result.totalInputTokens + result.totalCacheReadTokens;
+		result.cacheHitRate = totalTokensForRate > 0
+			? result.totalCacheReadTokens / totalTokensForRate
+			: NaN;
 
 		return result;
 	}

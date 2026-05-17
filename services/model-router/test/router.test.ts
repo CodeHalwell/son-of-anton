@@ -226,6 +226,7 @@ describe('MetricsCollector', () => {
 			inputTokens: 1000,
 			outputTokens: 500,
 			cachedTokens: 200,
+			cacheCreationTokens: 0,
 			latencyMs: 1500,
 			cost: 0.01,
 			success: true,

@@ -10,7 +10,8 @@ import { ModelRouter } from './router.js';
 import { MetricsCollector, calculateCost } from './metrics.js';
 import { toAnthropicFormat, toOpenAIFormat, fromAnthropicResponse, fromOpenAIResponse } from './translators.js';
 import type { FailoverConfig } from './failover/types.js';
-import { counter, histogram, expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
+import { counter, gauge, histogram, expressMetricsMiddleware, prometheusHandler } from '../_lib/metrics/dist/index.js';
+import type { UsageObserver } from './providers/types.js';
 
 function loadConfig(): ModelRoutesConfig {
 	const configPath = process.env.MODEL_ROUTES_CONFIG
@@ -119,6 +120,23 @@ const llmInputTokens = counter('llm_input_tokens_total', 'Total LLM input tokens
 const llmOutputTokens = counter('llm_output_tokens_total', 'Total LLM output tokens generated');
 const llmCacheReadTokens = counter('llm_cache_read_tokens_total', 'Total LLM tokens read from prompt cache');
 const llmCacheCreationTokens = counter('llm_cache_creation_tokens_total', 'Total LLM tokens written to prompt cache');
+const llmCacheHitRate = gauge('llm_cache_hit_rate', 'Cache hit rate: cache_read_tokens / (input_tokens + cache_read_tokens)');
+
+function createPrometheusUsageObserver(): UsageObserver {
+	return {
+		recordUsage(usage) {
+			const labels = { provider: usage.provider, model: usage.model, agent_role: usage.agentRole };
+			if (usage.inputTokens > 0) { llmInputTokens.inc(labels, usage.inputTokens); }
+			if (usage.outputTokens > 0) { llmOutputTokens.inc(labels, usage.outputTokens); }
+			if (usage.cacheReadInputTokens > 0) { llmCacheReadTokens.inc(labels, usage.cacheReadInputTokens); }
+			if (usage.cacheCreationInputTokens > 0) { llmCacheCreationTokens.inc(labels, usage.cacheCreationInputTokens); }
+			if (usage.cacheReadInputTokens > 0) {
+				const total = usage.inputTokens + usage.cacheReadInputTokens;
+				if (total > 0) { llmCacheHitRate.set(usage.cacheReadInputTokens / total, labels); }
+			}
+		},
+	};
+}
 
 export function createServer() {
 	const config = loadConfig();
@@ -235,6 +253,7 @@ export function createServer() {
 					inputTokens: unified.inputTokens,
 					outputTokens: unified.outputTokens,
 					cachedTokens: unified.cachedTokens,
+					cacheCreationTokens: unified.cacheCreationTokens ?? 0,
 					latencyMs,
 					cost,
 					success: true,
@@ -243,10 +262,15 @@ export function createServer() {
 				const successLabels = { provider, model, agent_role: context.agentRole, outcome: 'success' };
 				llmRequestTotal.inc(successLabels);
 				llmRequestDuration.observe(latencyMs, successLabels);
-				llmInputTokens.inc({ provider, model, agent_role: context.agentRole }, unified.inputTokens);
-				llmOutputTokens.inc({ provider, model, agent_role: context.agentRole }, unified.outputTokens);
-				llmCacheReadTokens.inc({ provider, model, agent_role: context.agentRole }, unified.cachedTokens);
-				llmCacheCreationTokens.inc({ provider, model, agent_role: context.agentRole }, unified.cacheCreationTokens ?? 0);
+				const tokenLabels = { provider, model, agent_role: context.agentRole };
+				if (unified.inputTokens > 0) { llmInputTokens.inc(tokenLabels, unified.inputTokens); }
+				if (unified.outputTokens > 0) { llmOutputTokens.inc(tokenLabels, unified.outputTokens); }
+				if (unified.cachedTokens > 0) {
+					llmCacheReadTokens.inc(tokenLabels, unified.cachedTokens);
+					const total = unified.inputTokens + unified.cachedTokens;
+					if (total > 0) { llmCacheHitRate.set(unified.cachedTokens / total, tokenLabels); }
+				}
+				if ((unified.cacheCreationTokens ?? 0) > 0) { llmCacheCreationTokens.inc(tokenLabels, unified.cacheCreationTokens!); }
 
 				res.json(unified);
 				return;
@@ -266,6 +290,7 @@ export function createServer() {
 					inputTokens: 0,
 					outputTokens: 0,
 					cachedTokens: 0,
+					cacheCreationTokens: 0,
 					latencyMs: errLatencyMs,
 					cost: 0,
 					success: false,
@@ -293,6 +318,7 @@ export function createServer() {
 			inputTokens: 0,
 			outputTokens: 0,
 			cachedTokens: 0,
+			cacheCreationTokens: 0,
 			latencyMs,
 			cost: 0,
 			success: false,
