@@ -1,0 +1,3 @@
+## 2026-05-18 - Keyboard Accessibility for Custom Buttons
+**Learning:** In the workbench UI, when building custom interactive elements with `role="button"` and `tabindex="0"` using the `DOM.$()` or `h()` builders, assigning an `onclick` handler does not automatically make the element keyboard-accessible. Screen readers and keyboard navigation require explicit `onkeydown` event listeners to respond to the 'Enter' and 'Space' keys.
+**Action:** When adding or modifying custom elements with `role="button"`, always implement `onkeydown` listeners alongside `onclick` to ensure full keyboard navigation and compliance with accessibility standards.

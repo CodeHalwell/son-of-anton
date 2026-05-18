@@ -305,7 +305,7 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 		h('div.top@top', { title: localize('diff.hiddenLines.top', 'Click or drag to show more above'), role: 'button', tabindex: 0, 'aria-label': localize('diff.hiddenLines.top', 'Click or drag to show more above') }),
 		h('div.center@content', { style: { display: 'flex' } }, [
 			h('div@first', { style: { display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: '0' } },
-				[$('a', { title: localize('showUnchangedRegion', 'Show Unchanged Region'), role: 'button', tabindex: 0, 'aria-label': localize('showUnchangedRegion', 'Show Unchanged Region'), onclick: () => { this._unchangedRegion.showAll(undefined); } },
+				[$('a', { title: localize('showUnchangedRegion', 'Show Unchanged Region'), role: 'button', tabindex: 0, 'aria-label': localize('showUnchangedRegion', 'Show Unchanged Region'), onclick: () => { this._unchangedRegion.showAll(undefined); }, onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._unchangedRegion.showAll(undefined); } } },
 					...renderLabelWithIcons('$(unfold)'))]
 			),
 			h('div@others', { style: { display: 'flex', justifyContent: 'center', alignItems: 'center' } }),
